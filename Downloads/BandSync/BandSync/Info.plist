@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleLocalizations</key>
+	<array/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>We use Face ID to provide a secure and convenient way to log in to your account.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>The app uses your location to display concert venues and events on a map.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>The app uses geolocation to display events and contacts on a map.</string>
+
+	<!-- Added permissions for working with camera and photo library -->
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required to scan and analyze receipts.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is required to upload and analyze receipt images.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Permission to add photos is required to save scanned receipts to your photo library.</string>
+</dict>
+</plist>

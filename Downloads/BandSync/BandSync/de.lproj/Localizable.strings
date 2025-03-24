@@ -1,0 +1,231 @@
+// Common
+"app_name" = "BandSync";
+"cancel" = "Abbrechen";
+"save" = "Speichern";
+"edit" = "Bearbeiten";
+"delete" = "Löschen";
+"confirm" = "Bestätigen";
+"back" = "Zurück";
+"add" = "Hinzufügen";
+"close" = "Schließen";
+"ok" = "OK";
+
+// Login & Authentication
+"login" = "Anmelden";
+"email" = "E-Mail";
+"password" = "Passwort";
+"sign_in" = "Einloggen";
+"register" = "Registrieren";
+"create_account" = "Konto erstellen";
+"confirm_password" = "Passwort bestätigen";
+"forgot_password" = "Passwort vergessen?";
+"biometric_login" = "Biometrische Anmeldung";
+"phone_verification" = "Telefonverifizierung";
+"verification_code" = "Verifizierungscode";
+"phone_number" = "Telefonnummer";
+
+// Calendar
+"calendar" = "Kalender";
+"concert_calendar" = "Konzertkalender";
+"new_event" = "Neues Event";
+"event_details" = "Event-Details";
+"location" = "Ort";
+"show_on_map" = "Auf Karte anzeigen";
+"hide_map" = "Karte ausblenden";
+"no_events" = "Keine Events für das ausgewählte Datum";
+
+// Event Details
+"title" = "Titel";
+"date" = "Datum";
+"time" = "Zeit";
+"event_type" = "Event-Typ";
+"status" = "Status";
+"basic_info" = "Grundinformationen";
+"organizer" = "Organisator";
+"coordinator" = "Koordinator";
+"hotel" = "Hotel";
+"address" = "Adresse";
+"check_in" = "Check-in";
+"check_out" = "Check-out";
+"fee" = "Honorar";
+"notes" = "Notizen";
+"schedule" = "Zeitplan";
+"day_schedule" = "Tagesablauf";
+"add_schedule_item" = "Zeitplaneintrag hinzufügen";
+"setlist" = "Setlist";
+"connect_setlist" = "Setlist verbinden";
+"change_setlist" = "Setlist ändern";
+"share" = "Teilen";
+"edit_event" = "Event bearbeiten";
+"save_event" = "Event speichern";
+"delete_event_confirmation" = "Sind Sie sicher, dass Sie dieses Event löschen möchten?";
+"delete_event" = "Event löschen";
+
+// Event Types
+"concert" = "Konzert";
+"festival" = "Festival";
+"meeting" = "Meeting";
+"rehearsal" = "Probe";
+"photo_session" = "Fotosession";
+"interview" = "Interview";
+
+// Event Status
+"booked" = "Gebucht";
+"confirmed" = "Bestätigt";
+
+// Contacts
+"contacts" = "Kontakte";
+"name" = "Name";
+"phone" = "Telefon";
+"email" = "E-Mail";
+"venue" = "Veranstaltungsort";
+"role" = "Rolle";
+"rating" = "Bewertung";
+"add_contact" = "Kontakt hinzufügen";
+"contact_details" = "Kontaktdetails";
+"search_contacts" = "Kontakte durchsuchen...";
+"contact_information" = "Kontaktinformationen";
+"call" = "Anrufen";
+"send_email" = "E-Mail senden";
+"set_location" = "Standort festlegen";
+"location_set" = "Standort festgelegt";
+
+// Setlists
+"setlists" = "Setlists";
+"no_setlists" = "Keine Setlists";
+"create_new_setlist" = "Neue Setlist erstellen";
+"add_song" = "Lied hinzufügen";
+"edit_setlist" = "Setlist bearbeiten";
+"total_duration" = "Gesamtdauer";
+"song_title" = "Liedtitel";
+"duration" = "Dauer";
+"minutes" = "Minuten";
+"seconds" = "Sekunden";
+"export_pdf" = "Als PDF exportieren";
+"rehearsal_mode" = "Probemodus";
+"current_song" = "Aktuelles Lied";
+"next_song" = "Nächstes";
+"elapsed" = "Vergangen";
+"remaining" = "Verbleibend";
+"end_rehearsal" = "Probe beenden";
+"end_rehearsal_confirmation" = "Sind Sie sicher, dass Sie die Probe beenden möchten?";
+"continue_rehearsal" = "Probe fortsetzen";
+"rehearsal_complete" = "Probe abgeschlossen";
+
+// Finances
+"finances" = "Finanzen";
+"income" = "Einnahmen";
+"expense" = "Ausgaben";
+"profit" = "Gewinn";
+"add_transaction" = "Transaktion hinzufügen";
+"transaction_type" = "Transaktionstyp";
+"details" = "Details";
+"amount" = "Betrag";
+"currency" = "Währung";
+"category" = "Kategorie";
+"date_range" = "Zeitraum";
+"week" = "Woche";
+"month" = "Monat";
+"year" = "Jahr";
+"all" = "Alle";
+"no_access" = "Kein Zugriff auf diesen Bereich";
+"receipt" = "Beleg";
+"add_receipt_image" = "Belegbild hinzufügen";
+"change_receipt_image" = "Belegbild ändern";
+"save_transaction" = "Transaktion speichern";
+
+// Finance Categories
+"gig" = "Auftritt";
+"merchandise" = "Merchandise";
+"royalties" = "Tantiemen";
+"sponsorship" = "Sponsoring";
+"logistics" = "Logistik";
+"accommodation" = "Unterkunft";
+"food" = "Verpflegung";
+"equipment" = "Ausrüstung";
+"promotion" = "Werbung";
+"fees" = "Gebühren";
+"other" = "Sonstiges";
+
+// Chat
+"chats" = "Chats";
+"new_chat" = "Neuer Chat";
+"chat_type" = "Chat-Typ";
+"group_chat" = "Gruppenchat";
+"chat_name" = "Chat-Name";
+"participants" = "Teilnehmer";
+"available_users" = "Verfügbare Benutzer";
+"search_users" = "Benutzer suchen";
+"create_chat" = "Chat erstellen";
+"message" = "Nachricht";
+"you_are_not_participant" = "Sie sind kein Teilnehmer dieses Chats";
+
+// More
+"more" = "Mehr";
+"profile" = "Profil";
+"account_settings" = "Kontoeinstellungen";
+"tasks" = "Aufgaben";
+"notifications" = "Benachrichtigungen";
+"appearance" = "Erscheinungsbild";
+"language" = "Sprache";
+"help_center" = "Hilfezentrum";
+"about" = "Info";
+"logout" = "Abmelden";
+"apply_changes" = "Änderungen anwenden";
+"language_changed" = "Sprache geändert";
+"language_changed_to" = "Sprache wurde geändert auf";
+"language_selection" = "Sprachauswahl";
+"language_note" = "Hinweis: Einige Elemente der Benutzeroberfläche müssen möglicherweise die App neu gestartet werden, um in der neuen Sprache angezeigt zu werden";
+
+// Account & Security
+"account" = "Konto";
+"personal_information" = "Persönliche Informationen";
+"security" = "Sicherheit";
+"advanced_security" = "Erweiterte Sicherheitseinstellungen";
+"enable_biometric" = "Biometrische Anmeldung aktivieren";
+"face_id" = "Face ID";
+"touch_id" = "Touch ID";
+"two_factor" = "Zwei-Faktor-Authentifizierung";
+"pin_code" = "PIN-Code";
+"pin_protection" = "PIN-Code-Schutz";
+"set_up" = "Einrichten";
+"enabled" = "Aktiviert";
+"change_password" = "Passwort ändern";
+"delete_account" = "Konto löschen";
+"delete_account_confirmation" = "Sind Sie сicher, dass Sie Ihr Konto löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.";
+"enable_biometric_auth" = "Biometrische Authentifizierung aktivieren";
+"biometric_for_login" = "Möchten Sie Face ID/Touch ID für eine schnellere Anmeldung verwenden?";
+"enable" = "Aktivieren";
+"create_pin" = "PIN-Code erstellen";
+"pin_additional_security" = "Dieser PIN wird als zusätzlicher Sicherheitsfaktor verwendet";
+"enter_pin" = "PIN eingeben (6 Ziffern)";
+"confirm_pin" = "PIN bestätigen";
+"save_pin" = "PIN speichern";
+"pin_setup" = "PIN-Einrichtung";
+"pin_success" = "PIN-Code erfolgreich festgelegt!";
+"notify_on_login" = "Bei neuer Anmeldung benachrichtigen";
+"data_protection" = "Datenschutz";
+"auto_data_wipe" = "Automatisches Löschen von Daten";
+"data_wipe_description" = "Ihre sensiblen Daten werden nach 30 Tagen Inaktivität automatisch gelöscht.";
+"encryption" = "Verschlüsselung";
+"encryption_description" = "Alle auf diesem Gerät gespeicherten sensiblen Daten sind verschlüsselt.";
+
+// Admin Panel
+"pending_requests" = "Ausstehende Beitrittsanfragen";
+"approve" = "Genehmigen";
+"users_list" = "Benutzerliste";
+"assign_role" = "Rolle zuweisen";
+"assign_admin" = "Als Admin zuweisen";
+"assign_manager" = "Als Manager zuweisen";
+"assign_musician" = "Als Musiker zuweisen";
+"user_role" = "Benutzerrolle";
+
+// Errors
+"error_loading" = "Fehler beim Laden der Daten";
+"not_authorized" = "Nicht autorisiert";
+"unknown_role" = "Unbekannte Rolle";
+"error" = "Fehler";
+"registration_successful" = "Registrierung erfolgreich!";
+"please_check_inputs" = "Bitte überprüfen Sie Ihre Eingaben und versuchen Sie es erneut.";
+"error_saving_data" = "Fehler beim Speichern der Daten:";
+"error_loading_data" = "Fehler beim Laden der Daten:";

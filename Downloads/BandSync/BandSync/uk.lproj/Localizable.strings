@@ -1,0 +1,231 @@
+// Common
+"app_name" = "BandSync";
+"cancel" = "Скасувати";
+"save" = "Зберегти";
+"edit" = "Редагувати";
+"delete" = "Видалити";
+"confirm" = "Підтвердити";
+"back" = "Назад";
+"add" = "Додати";
+"close" = "Закрити";
+"ok" = "OK";
+
+// Login & Authentication
+"login" = "Вхід";
+"email" = "Email";
+"password" = "Пароль";
+"sign_in" = "Увійти";
+"register" = "Реєстрація";
+"create_account" = "Створити акаунт";
+"confirm_password" = "Підтвердіть пароль";
+"forgot_password" = "Забули пароль?";
+"biometric_login" = "Біометричний вхід";
+"phone_verification" = "Перевірка телефону";
+"verification_code" = "Код підтвердження";
+"phone_number" = "Номер телефону";
+
+// Calendar
+"calendar" = "Календар";
+"concert_calendar" = "Концертний календар";
+"new_event" = "Нова подія";
+"event_details" = "Деталі події";
+"location" = "Локація";
+"show_on_map" = "Показати на карті";
+"hide_map" = "Сховати карту";
+"no_events" = "Немає подій на обрану дату";
+
+// Event Details
+"title" = "Назва";
+"date" = "Дата";
+"time" = "Час";
+"event_type" = "Тип події";
+"status" = "Статус";
+"basic_info" = "Основна інформація";
+"organizer" = "Організатор";
+"coordinator" = "Координатор";
+"hotel" = "Готель";
+"address" = "Адреса";
+"check_in" = "Чек-ін";
+"check_out" = "Чек-аут";
+"fee" = "Гонорар";
+"notes" = "Нотатки";
+"schedule" = "Розклад";
+"day_schedule" = "Розклад дня";
+"add_schedule_item" = "Додати пункт розкладу";
+"setlist" = "Сетліст";
+"connect_setlist" = "Підключити сетліст";
+"change_setlist" = "Змінити сетліст";
+"share" = "Поділитися";
+"edit_event" = "Редагувати подію";
+"save_event" = "Зберегти подію";
+"delete_event_confirmation" = "Ви впевнені, що хочете видалити цю подію?";
+"delete_event" = "Видалити подію";
+
+// Event Types
+"concert" = "Концерт";
+"festival" = "Фестиваль";
+"meeting" = "Зустріч";
+"rehearsal" = "Репетиція";
+"photo_session" = "Фотосесія";
+"interview" = "Інтерв'ю";
+
+// Event Status
+"booked" = "Заброньовано";
+"confirmed" = "Підтверджено";
+
+// Contacts
+"contacts" = "Контакти";
+"name" = "Ім'я";
+"phone" = "Телефон";
+"email" = "Email";
+"venue" = "Майданчик";
+"role" = "Роль";
+"rating" = "Рейтинг";
+"add_contact" = "Додати контакт";
+"contact_details" = "Деталі контакту";
+"search_contacts" = "Пошук контактів...";
+"contact_information" = "Контактна інформація";
+"call" = "Зателефонувати";
+"send_email" = "Надіслати email";
+"set_location" = "Встановити локацію";
+"location_set" = "Локацію встановлено";
+
+// Setlists
+"setlists" = "Сетлісти";
+"no_setlists" = "Немає сетлістів";
+"create_new_setlist" = "Створити новий сетліст";
+"add_song" = "Додати пісню";
+"edit_setlist" = "Редагувати сетліст";
+"total_duration" = "Загальна тривалість";
+"song_title" = "Назва пісні";
+"duration" = "Тривалість";
+"minutes" = "Хвилини";
+"seconds" = "Секунди";
+"export_pdf" = "Експорт у PDF";
+"rehearsal_mode" = "Режим репетиції";
+"current_song" = "Поточна пісня";
+"next_song" = "Наступна";
+"elapsed" = "Пройшло";
+"remaining" = "Залишилось";
+"end_rehearsal" = "Завершити репетицію";
+"end_rehearsal_confirmation" = "Ви впевнені, що хочете завершити репетицію?";
+"continue_rehearsal" = "Продовжити репетицію";
+"rehearsal_complete" = "Репетицію завершено";
+
+// Finances
+"finances" = "Фінанси";
+"income" = "Дохід";
+"expense" = "Витрати";
+"profit" = "Прибуток";
+"add_transaction" = "Додати транзакцію";
+"transaction_type" = "Тип транзакції";
+"details" = "Деталі";
+"amount" = "Сума";
+"currency" = "Валюта";
+"category" = "Категорія";
+"date_range" = "Період";
+"week" = "Тиждень";
+"month" = "Місяць";
+"year" = "Рік";
+"all" = "Всі";
+"no_access" = "Немає доступу до цього розділу";
+"receipt" = "Чек";
+"add_receipt_image" = "Додати зображення чека";
+"change_receipt_image" = "Змінити зображення чека";
+"save_transaction" = "Зберегти транзакцію";
+
+// Finance Categories
+"gig" = "Виступ";
+"merchandise" = "Мерч";
+"royalties" = "Роялті";
+"sponsorship" = "Спонсорство";
+"logistics" = "Логістика";
+"accommodation" = "Проживання";
+"food" = "Харчування";
+"equipment" = "Обладнання";
+"promotion" = "Промоція";
+"fees" = "Збори";
+"other" = "Інше";
+
+// Chat
+"chats" = "Чати";
+"new_chat" = "Новий чат";
+"chat_type" = "Тип чату";
+"group_chat" = "Груповий чат";
+"chat_name" = "Назва чату";
+"participants" = "Учасники";
+"available_users" = "Доступні користувачі";
+"search_users" = "Пошук користувачів";
+"create_chat" = "Створити чат";
+"message" = "Повідомлення";
+"you_are_not_participant" = "Ви не є учасником цього чату";
+
+// More
+"more" = "Більше";
+"profile" = "Профіль";
+"account_settings" = "Налаштування акаунту";
+"tasks" = "Завдання";
+"notifications" = "Сповіщення";
+"appearance" = "Оформлення";
+"language" = "Мова";
+"help_center" = "Центр підтримки";
+"about" = "Про додаток";
+"logout" = "Вийти";
+"apply_changes" = "Застосувати зміни";
+"language_changed" = "Мову змінено";
+"language_changed_to" = "Мову змінено на";
+"language_selection" = "Вибір мови";
+"language_note" = "Примітка: Деякі елементи інтерфейсу можуть потребувати перезапуску додатка для відображення новою мовою";
+
+// Account & Security
+"account" = "Акаунт";
+"personal_information" = "Особиста інформація";
+"security" = "Безпека";
+"advanced_security" = "Розширені налаштування безпеки";
+"enable_biometric" = "Увімкнути біометричний вхід";
+"face_id" = "Face ID";
+"touch_id" = "Touch ID";
+"two_factor" = "Двофакторна аутентифікація";
+"pin_code" = "PIN-код";
+"pin_protection" = "Захист PIN-кодом";
+"set_up" = "Налаштувати";
+"enabled" = "Увімкнено";
+"change_password" = "Змінити пароль";
+"delete_account" = "Видалити акаунт";
+"delete_account_confirmation" = "Ви впевнені, що хочете видалити свій акаунт? Цю дію неможливо скасувати.";
+"enable_biometric_auth" = "Увімкнути біометричну аутентифікацію";
+"biometric_for_login" = "Бажаєте використовувати Face ID/Touch ID для швидшого входу?";
+"enable" = "Увімкнути";
+"create_pin" = "Створити PIN-код";
+"pin_additional_security" = "Цей PIN буде використовуватися як додатковий фактор безпеки";
+"enter_pin" = "Введіть PIN (6 цифр)";
+"confirm_pin" = "Підтвердіть PIN";
+"save_pin" = "Зберегти PIN";
+"pin_setup" = "Налаштування PIN";
+"pin_success" = "PIN-код успішно встановлено!";
+"notify_on_login" = "Сповіщати про новий вхід";
+"data_protection" = "Захист даних";
+"auto_data_wipe" = "Автоматичне очищення даних";
+"data_wipe_description" = "Ваші конфіденційні дані будуть автоматично видалені після 30 днів бездіяльності.";
+"encryption" = "Шифрування";
+"encryption_description" = "Всі конфіденційні дані, що зберігаються на цьому пристрої, шифруються.";
+
+// Admin Panel
+"pending_requests" = "Запити на приєднання";
+"approve" = "Підтвердити";
+"users_list" = "Список користувачів";
+"assign_role" = "Призначити роль";
+"assign_admin" = "Призначити адміністратором";
+"assign_manager" = "Призначити менеджером";
+"assign_musician" = "Призначити музикантом";
+"user_role" = "Роль користувача";
+
+// Errors
+"error_loading" = "Помилка завантаження даних";
+"not_authorized" = "Не авторизовано";
+"unknown_role" = "Невідома роль";
+"error" = "Помилка";
+"registration_successful" = "Реєстрація успішна!";
+"please_check_inputs" = "Будь ласка, перевірте введені дані та спробуйте знову.";
+"error_saving_data" = "Помилка збереження даних:";
+"error_loading_data" = "Помилка завантаження даних:";
