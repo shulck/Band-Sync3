@@ -64,11 +64,15 @@ struct EditFinanceRecordView: View {
                 Section(header: Text("Details")) {
                     TextField("Amount", text: $amount)
                         .keyboardType(.decimalPad)
-                    
-                    Picker("Currency", selection: $currency) {
-                        ForEach(currencies, id: \.self) { currency in
-                            Text(currency).tag(currency)
-                        }
+                        .padding()
+                        .background(!FinanceValidator.validateAmount(amount) && !amount.isEmpty ?
+                                    Color.red.opacity(0.1) : Color(.systemGray6))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(!FinanceValidator.validateAmount(amount) && !amount.isEmpty ?
+                                        Color.red : Color.clear, lineWidth: 1)
+                        )
                     }
                     
                     TextField("Description", text: $description)
@@ -145,31 +149,62 @@ struct EditFinanceRecordView: View {
                 ImagePicker(image: $receiptImage)
             }
         }
-    }
+
     
     private var isFormValid: Bool {
-        let amountValue = Double(amount) ?? 0
-        return !description.isEmpty && !category.isEmpty && amountValue > 0
+        let validationResult = FinanceValidator.validateFinanceRecord(
+            amount: amount,
+            currency: currency,
+            description: description,
+            category: category,
+            type: type
+        )
+        
+        // Если есть ошибка валидации, обновляем сообщение об ошибке
+        if !validationResult.isValid && errorMessage == nil {
+            errorMessage = validationResult.error
+        }
+        
+        return validationResult.isValid
     }
     
     private func saveTransaction() {
         isUploading = true
         errorMessage = nil
         
-        // Если у нас есть новое изображение, загружаем его
+        // Валидация суммы
+        guard let amountValue = Double(amount), amountValue > 0 else {
+            isUploading = false
+            errorMessage = "Пожалуйста, введите корректную сумму"
+            return
+        }
+        
+        // Если есть новое изображение, загружаем его
         if let image = receiptImage {
-            uploadReceiptImage(image) { url in
-                if let url = url {
-                    // Обновляем URL и сохраняем транзакцию
-                    saveFinanceRecord(imageURL: url)
-                } else {
-                    // Обрабатываем ошибку загрузки
-                    isUploading = false
-                    errorMessage = "Failed to upload image. Please try again."
+            ImageUploadService.uploadImage(image) { result in
+                switch result {
+                case .success(let url):
+                    // Если было старое изображение, удаляем его
+                    if let oldURL = self.receiptImageURL {
+                        ImageUploadService.deleteImage(url: oldURL) { _ in
+                            // Независимо от результата удаления старого изображения
+                            // сохраняем запись с новым
+                            self.saveFinanceRecord(imageURL: url)
+                        }
+                    } else {
+                        // Если старого изображения не было, просто сохраняем запись
+                        self.saveFinanceRecord(imageURL: url)
+                    }
+                    
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        self.isUploading = false
+                        self.errorMessage = "Ошибка загрузки чека: \(error.localizedDescription)"
+                    }
                 }
             }
         } else {
-            // Если нет нового изображения, просто обновляем запись
+            // Если нового изображения нет, сохраняем с существующим URL или без него
             saveFinanceRecord(imageURL: receiptImageURL)
         }
     }

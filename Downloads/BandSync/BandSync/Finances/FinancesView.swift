@@ -118,6 +118,7 @@ struct FinancesView: View {
             .onAppear {
                 fetchUserRole()
                 fetchFinances()
+                updateCurrencyRates()
             }
             .onChange(of: selectedTimeRange) { _ in
                 calculateTotals()
@@ -146,8 +147,84 @@ struct FinancesView: View {
 
     func calculateTotals() {
         let filteredRecords = filterRecordsByTimeRange(finances)
-        totalIncome = filteredRecords.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
-        totalExpenses = filteredRecords.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+        
+        // Временная переменная для подсчета итогов
+        var totalIncomeTmp: Double = 0
+        var totalExpensesTmp: Double = 0
+        
+        // Обрабатываем каждую запись
+        for record in filteredRecords {
+            do {
+                // Если валюта записи совпадает с выбранной, используем сумму как есть
+                if record.currency == selectedCurrency {
+                    if record.type == .income {
+                        totalIncomeTmp += record.amount
+                    } else {
+                        totalExpensesTmp += record.amount
+                    }
+                } else {
+                    // Иначе выполняем конвертацию
+                    if let convertedAmount = CurrencyConverterService.shared.convert(
+                        amount: record.amount,
+                        from: record.currency,
+                        to: selectedCurrency
+                    ) {
+                        if record.type == .income {
+                            totalIncomeTmp += convertedAmount
+                        } else {
+                            totalExpensesTmp += convertedAmount
+                        }
+                    } else {
+                        // Если конвертация не удалась, используем приблизительный курс
+                        // Это временное решение, лучше показать пользователю сообщение
+                        let approximateRate = getApproximateRate(from: record.currency, to: selectedCurrency)
+                        let approximateAmount = record.amount * approximateRate
+                        
+                        if record.type == .income {
+                            totalIncomeTmp += approximateAmount
+                        } else {
+                            totalExpensesTmp += approximateAmount
+                        }
+                    }
+                }
+            } catch {
+                print("Error calculating totals: \(error.localizedDescription)")
+            }
+        }
+        
+        // Обновляем итоговые суммы
+        DispatchQueue.main.async {
+            self.totalIncome = totalIncomeTmp
+            self.totalExpenses = totalExpensesTmp
+        }
+        
+        // Обновляем курсы валют для следующего расчета
+        updateCurrencyRates()
+    }
+
+    // Возвращает приблизительный курс валют
+    private func getApproximateRate(from sourceCurrency: String, to targetCurrency: String) -> Double {
+        // Здесь можно добавить базовые курсы для наиболее распространенных валют
+        // Это резервный вариант, если API недоступен
+        let approximateRates: [String: [String: Double]] = [
+            "USD": ["EUR": 0.92, "UAH": 38.0, "GBP": 0.8],
+            "EUR": ["USD": 1.09, "UAH": 41.0, "GBP": 0.87],
+            "UAH": ["USD": 0.026, "EUR": 0.024, "GBP": 0.021],
+            "GBP": ["USD": 1.25, "EUR": 1.15, "UAH": 47.0]
+        ]
+        
+        return approximateRates[sourceCurrency]?[targetCurrency] ?? 1.0
+    }
+
+    // Обновляет курсы валют для всех используемых валют
+    private func updateCurrencyRates() {
+        // Получаем все уникальные валюты, используемые в записях
+        let uniqueCurrencies = Set(finances.map { $0.currency })
+        
+        // Обновляем курсы для каждой валюты
+        for currency in uniqueCurrencies {
+            CurrencyConverterService.shared.updateExchangeRates(for: currency)
+        }
     }
 
     func filterRecordsByTimeRange(_ records: [FinanceRecord]) -> [FinanceRecord] {
@@ -173,6 +250,16 @@ struct FinancesView: View {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = currency
+        switch currency {
+            case "USD":
+                formatter.locale = Locale(identifier: "en_US")
+            case "EUR":
+                formatter.locale = Locale(identifier: "de_DE")
+            case "UAH":
+                formatter.locale = Locale(identifier: "uk_UA")
+            default:
+                formatter.locale = Locale.current
+            }
 
         return formatter.string(from: NSNumber(value: amount)) ?? "\(amount) \(currency)"
     }
@@ -574,8 +661,18 @@ struct FinanceChartView: View {
 }
 
 // View for adding a financial record
+import SwiftUI
+import FirebaseAuth
+import FirebaseFirestore
+
+import SwiftUI
+import FirebaseAuth
+import FirebaseFirestore
+import FirebaseStorage
+
 struct AddFinanceRecordView: View {
     @Environment(\.presentationMode) var presentationMode
+    
     @State private var transactionType: FinanceType = .income
     @State private var amount = ""
     @State private var description = ""
@@ -589,7 +686,6 @@ struct AddFinanceRecordView: View {
     @State private var errorMessage: String?
 
     var currencies = ["USD", "EUR", "UAH"]
-
     var incomeCategories = ["Gig", "Merchandise", "Royalties", "Sponsorship", "Other"]
     var expenseCategories = ["Logistics", "Accommodation", "Food", "Equipment", "Promotion", "Fees", "Other"]
     var merchandiseSubcategories = ["T-Shirts", "Hoodies", "Hats", "Pins/Stickers", "CDs/Vinyl", "Posters", "Other"]
@@ -612,25 +708,24 @@ struct AddFinanceRecordView: View {
                         .keyboardType(.decimalPad)
 
                     Picker("Currency", selection: $currency) {
-                        ForEach(currencies, id: \.self) { currency in
-                            Text(currency).tag(currency)
+                        ForEach(currencies, id: \.self) {
+                            Text($0).tag($0)
                         }
                     }
 
                     TextField("Description", text: $description)
 
                     Picker("Category", selection: $category) {
-                        ForEach(transactionType == .income ? incomeCategories : expenseCategories, id: \.self) { category in
-                            Text(category).tag(category)
+                        ForEach(transactionType == .income ? incomeCategories : expenseCategories, id: \.self) {
+                            Text($0).tag($0)
                         }
                     }
                     
-                    // If category is Merchandise, show subcategories
                     if category == "Merchandise" {
                         Picker("Subcategory", selection: $subcategory) {
                             Text("None").tag("")
-                            ForEach(merchandiseSubcategories, id: \.self) { item in
-                                Text(item).tag(item)
+                            ForEach(merchandiseSubcategories, id: \.self) {
+                                Text($0).tag($0)
                             }
                         }
                     }
@@ -638,28 +733,19 @@ struct AddFinanceRecordView: View {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                 }
 
-                Section(header: Text("Receipt/Invoice")) {
-                    Button(action: {
-                        showImagePicker = true
-                    }) {
-                        HStack {
-                            Text(receiptImage == nil ? "Add Receipt Image" : "Change Receipt Image")
-                            Spacer()
-                            if receiptImage != nil {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                            }
-                        }
+                Section(header: Text("Receipt")) {
+                    Button(action: { showImagePicker = true }) {
+                        Text(receiptImage == nil ? "Add Receipt" : "Change Receipt")
                     }
 
-                    if receiptImage != nil {
-                        Image(uiImage: receiptImage!)
+                    if let image = receiptImage {
+                        Image(uiImage: image)
                             .resizable()
                             .scaledToFit()
                             .frame(height: 200)
                     }
                 }
-                
+
                 if let errorMessage = errorMessage {
                     Section {
                         Text(errorMessage)
@@ -668,14 +754,10 @@ struct AddFinanceRecordView: View {
                 }
 
                 Section {
-                    Button(action: saveTransaction) {
-                        if isUploading {
-                            ProgressView()
-                        } else {
-                            Text("Save Transaction")
-                        }
+                    Button("Save Transaction") {
+                        saveTransaction()
                     }
-                    .disabled(!isFormValid || isUploading)
+                    .disabled(isUploading || !isFormValid)
                 }
             }
             .navigationTitle("Add Transaction")
@@ -686,32 +768,41 @@ struct AddFinanceRecordView: View {
                 ImagePicker(image: $receiptImage)
             }
             .onChange(of: transactionType) { _ in
-                // Reset category when transaction type changes
                 category = ""
                 subcategory = ""
             }
         }
     }
 
-    var isFormValid: Bool {
-        let amountValue = Double(amount) ?? 0
-        return !description.isEmpty && !category.isEmpty && amountValue > 0
+    private var isFormValid: Bool {
+        guard !amount.isEmpty,
+              let _ = Double(amount),
+              !description.isEmpty,
+              !category.isEmpty else {
+            return false
+        }
+        return true
     }
 
-    func saveTransaction() {
-        guard let amountValue = Double(amount) else { return }
+    private func saveTransaction() {
+        guard let amountValue = Double(amount) else {
+            errorMessage = "Invalid amount"
+            return
+        }
         
         isUploading = true
         errorMessage = nil
         
-        // If we have an image, upload it first
         if let image = receiptImage {
-            uploadImage(image) { url in
-                if let url = url {
+            ImageUploadService.uploadImage(image) { result in
+                switch result {
+                case .success(let url):
                     createRecord(receiptURL: url)
-                } else {
-                    isUploading = false
-                    errorMessage = "Failed to upload image. Please try again."
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        self.isUploading = false
+                        self.errorMessage = "Upload error: \(error.localizedDescription)"
+                    }
                 }
             }
         } else {
@@ -719,38 +810,11 @@ struct AddFinanceRecordView: View {
         }
     }
     
-    func uploadImage(_ image: UIImage, completion: @escaping (String?) -> Void) {
-        guard let imageData = image.jpegData(compressionQuality: 0.6) else {
-            completion(nil)
-            return
-        }
-        
-        let storageRef = Storage.storage().reference().child("receipts/\(UUID().uuidString).jpg")
-        
-        storageRef.putData(imageData, metadata: nil) { metadata, error in
-            if let error = error {
-                print("Error uploading image: \(error.localizedDescription)")
-                completion(nil)
-                return
-            }
-            
-            storageRef.downloadURL { url, error in
-                completion(url?.absoluteString)
-            }
-        }
-    }
-    
-    func createRecord(receiptURL: String?) {
-        guard let amountValue = Double(amount) else {
-            isUploading = false
-            return
-        }
-        
-        // Create the new record
+    private func createRecord(receiptURL: String?) {
         let newRecord = FinanceRecord(
             id: UUID().uuidString,
             type: transactionType,
-            amount: amountValue,
+            amount: Double(amount)!,
             currency: currency,
             description: description,
             category: category,
@@ -758,55 +822,13 @@ struct AddFinanceRecordView: View {
             receiptImageURL: receiptURL,
             eventId: nil,
             eventTitle: nil,
-            subcategory: category == "Merchandise" && !subcategory.isEmpty ? subcategory : nil,
+            subcategory: category == "Merchandise" ? subcategory : nil,
             tags: nil
         )
         
-        // Pass the record back through the callback
         onAdd(newRecord)
         
-        // Dismiss the form
         isUploading = false
         presentationMode.wrappedValue.dismiss()
-    }
-}
-
-// Image picker component
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    @Environment(\.presentationMode) var presentationMode
-    
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.delegate = context.coordinator
-        picker.allowsEditing = true
-        picker.sourceType = .photoLibrary
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
-        // Nothing to update
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        let parent: ImagePicker
-        
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-        
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let editedImage = info[.editedImage] as? UIImage {
-                parent.image = editedImage
-            } else if let originalImage = info[.originalImage] as? UIImage {
-                parent.image = originalImage
-            }
-            
-            parent.presentationMode.wrappedValue.dismiss()
-        }
     }
 }
