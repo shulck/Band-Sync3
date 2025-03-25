@@ -4,6 +4,7 @@ import FirebaseFirestore
 import FirebaseStorage
 
 struct FinancesView: View {
+    @State private var showingMerchandiseSale = false
     @State private var selectedCategory: String?
     @State private var selectedEvent: Event? = nil
     @State private var events: [Event] = []
@@ -163,7 +164,6 @@ struct FinancesView: View {
                         }
                         .onDelete(perform: deleteRecord)
                     }
-
                     Button(action: {
                         showingAddTransaction = true
                     }) {
@@ -175,6 +175,39 @@ struct FinancesView: View {
                             .cornerRadius(8)
                     }
                     .padding()
+
+                    NavigationLink(destination: MerchandiseInventoryView()) {
+                        Text("Merchandise Inventory")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue.opacity(0.8))
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                    .padding(.horizontal)
+                    
+                    NavigationLink(destination: MerchandiseSalesReportView()) {
+                                            Text("Merchandise Sales Report")
+                                                .frame(maxWidth: .infinity)
+                                                .padding()
+                                                .background(Color.purple.opacity(0.8))
+                                                .foregroundColor(.white)
+                                                .cornerRadius(8)
+                                        }
+                                        .padding(.horizontal)
+
+                    Button(action: {
+                        showingMerchandiseSale = true
+                    }) {
+                        Text("Record Merchandise Sale")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                    .padding()
+                    
                 } else {
                     Text("No Access")
                         .foregroundColor(.red)
@@ -193,15 +226,24 @@ struct FinancesView: View {
             }
             .onAppear {
                 fetchUserRole()
-                    fetchFinances()
-                    fetchEvents()
-                    updateCurrencyRates()
+                fetchFinances()
+                fetchEvents()
+                ensureCurrencyRatesAreUpdated {
+                    self.calculateTotals()
                 }
+            }
             .onChange(of: selectedTimeRange) { _ in
                 calculateTotals()
             }
             .sheet(isPresented: $showingAddTransaction) {
                 AddFinanceRecordView { newRecord in
+                    finances.append(newRecord)
+                    saveFinanceRecord(newRecord)
+                    calculateTotals()
+                }
+            }
+            .sheet(isPresented: $showingMerchandiseSale) {
+                MerchandiseSaleView { newRecord in
                     finances.append(newRecord)
                     saveFinanceRecord(newRecord)
                     calculateTotals()
@@ -223,72 +265,55 @@ struct FinancesView: View {
     }
 
     func calculateTotals() {
+        // Get records filtered by the selected time range
         let filteredRecords = filterRecordsByTimeRange(finances)
-        // Ограничьте сумму явным перечислением значений
-            var sumIncome = 0.0
-            for record in filteredRecords where record.type == .income {
-                sumIncome += record.amount
-                // Здесь можно убедиться, что используются правильные значения
-            }
-            totalIncome = sumIncome
-            
-            totalExpenses = filteredRecords.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
-        // Отладочные выводы
-           print("Все транзакции: \(finances.count)")
-           print("Отфильтрованные транзакции: \(filteredRecords.count)")
-           print("Транзакции дохода: \(filteredRecords.filter { $0.type == .income }.count)")
-           print("Общий доход: \(totalIncome)")
-           print("Общие расходы: \(totalExpenses)")
-           
-           // Вывод каждой транзакции дохода для проверки
-           print("Детали транзакций дохода:")
-           for (index, transaction) in filteredRecords.filter({ $0.type == .income }).enumerated() {
-               print("[\(index)] \(transaction.description): \(transaction.amount) \(transaction.currency)")
-           }
         
-        // Временная переменная для подсчета итогов
-        var totalIncomeTmp: Double = 0
-        var totalExpensesTmp: Double = 0
+        // Reset totals
+        var incomesSum = 0.0
+        var expensesSum = 0.0
         
-        // Обрабатываем каждую запись
+        // Process each record
         for record in filteredRecords {
-            do {
-                // Если валюта записи совпадает с выбранной, используем сумму как есть
-                if record.currency == selectedCurrency {
-                    if record.type == .income {
-                        totalIncomeTmp += record.amount
-                    } else {
-                        totalExpensesTmp += record.amount
-                    }
-                } else {
-                    // Иначе выполняем конвертацию
-                    if let convertedAmount = CurrencyConverterService.shared.convert(
-                        amount: record.amount,
-                        from: record.currency,
-                        to: selectedCurrency
-                    ) {
-                        if record.type == .income {
-                            totalIncomeTmp += convertedAmount
-                        } else {
-                            totalExpensesTmp += convertedAmount
-                        }
-                    } else {
-                        // Если конвертация не удалась, используем приблизительный курс
-                        // Это временное решение, лучше показать пользователю сообщение
-                        let approximateRate = getApproximateRate(from: record.currency, to: selectedCurrency)
-                        let approximateAmount = record.amount * approximateRate
-                        
-                        if record.type == .income {
-                            totalIncomeTmp += approximateAmount
-                        } else {
-                            totalExpensesTmp += approximateAmount
-                        }
-                    }
-                }
-            } catch {
-                print("Error calculating totals: \(error.localizedDescription)")
+            // Convert currency if needed
+            let amount = convertAmountIfNeeded(
+                amount: record.amount,
+                fromCurrency: record.currency,
+                toCurrency: selectedCurrency
+            )
+            
+            // Add to the appropriate total
+            if record.type == .income {
+                incomesSum += amount
+            } else {
+                expensesSum += amount
             }
+        
+        // Update the state variables
+        DispatchQueue.main.async {
+            self.totalIncome = incomesSum
+            self.totalExpenses = expensesSum
         }
+    }
+
+    // Helper function for currency conversion
+    func convertAmountIfNeeded(amount: Double, fromCurrency: String, toCurrency: String) -> Double {
+        // If currencies match, no conversion needed
+        if fromCurrency == toCurrency {
+            return amount
+        }
+        
+        // Try to convert using the service
+        if let convertedAmount = CurrencyConverterService.shared.convert(
+            amount: amount,
+            from: fromCurrency,
+            to: toCurrency
+        ) {
+            return convertedAmount
+        } else {
+            // Fallback to approximate conversion if service fails
+            return amount * getApproximateRate(from: fromCurrency, to: toCurrency)
+        }
+    }
         
         // Обновляем итоговые суммы
         DispatchQueue.main.async {
@@ -299,7 +324,30 @@ struct FinancesView: View {
         // Обновляем курсы валют для следующего расчета
         updateCurrencyRates()
     }
-
+    func ensureCurrencyRatesAreUpdated(completion: @escaping () -> Void) {
+        // Получаем все уникальные валюты используемые в записях
+        let uniqueCurrencies = Set(finances.map { $0.currency })
+        
+        // Добавляем текущую выбранную валюту если ее еще нет
+        var currenciesToUpdate = uniqueCurrencies
+        currenciesToUpdate.insert(selectedCurrency)
+        
+        // Создаем группу для отслеживания завершения всех обновлений
+        let updateGroup = DispatchGroup()
+        
+        // Запрашиваем обновления для каждой валюты
+        for currency in currenciesToUpdate {
+            updateGroup.enter()
+            CurrencyConverterService.shared.updateExchangeRates(for: currency) { success in
+                updateGroup.leave()
+            }
+        }
+        
+        // Вызываем completion когда все обновления завершены
+        updateGroup.notify(queue: .main) {
+            completion()
+        }
+    }
     // Возвращает приблизительный курс валют
     private func getApproximateRate(from sourceCurrency: String, to targetCurrency: String) -> Double {
         // Здесь можно добавить базовые курсы для наиболее распространенных валют
