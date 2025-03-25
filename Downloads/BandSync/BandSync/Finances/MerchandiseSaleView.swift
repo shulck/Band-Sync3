@@ -199,7 +199,7 @@ struct MerchandiseSaleView: View {
                     return
                 }
                 
-                batch.updateData(["quantity": newQuantity], forReference: itemRef)
+                batch.updateData(["quantity": newQuantity], forDocument: itemRef)
                 
                 // Add to description
                 itemDescriptions.append("\(quantity)x \(item.name)")
@@ -240,7 +240,7 @@ struct MerchandiseSaleView: View {
         }
         
         // Add the finance record to the batch
-        batch.setData(recordData, forReference: recordRef)
+        batch.setData(recordData, forDocument: recordRef)
         
         // Commit the batch
         batch.commit { error in

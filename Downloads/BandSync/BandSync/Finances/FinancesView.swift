@@ -185,7 +185,6 @@ struct FinancesView: View {
                             .cornerRadius(8)
                     }
                     .padding(.horizontal)
-                    
                     NavigationLink(destination: MerchandiseSalesReportView()) {
                                             Text("Merchandise Sales Report")
                                                 .frame(maxWidth: .infinity)
@@ -389,6 +388,10 @@ struct FinancesView: View {
             return records.filter { $0.date >= yearAgo }
         case .all:
             return records
+        case .quarter:
+            <#code#>
+        case .custom:
+            <#code#>
         }
     }
 
@@ -596,8 +599,15 @@ struct FinancesView: View {
 }
 
 // Time range for data filtering
-enum TimeRange {
-    case week, month, year, all
+enum TimeRange: String, CaseIterable, Identifiable {
+    case week = "Week"
+    case month = "Month"
+    case quarter = "Quarter"
+    case year = "Year"
+    case custom = "Custom"
+    case all = "All"
+    
+    var id: String { rawValue }
 }
 
 // View for displaying financial summary

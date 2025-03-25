@@ -464,7 +464,3 @@ extension Date {
         return Calendar.current.date(byAdding: components, to: startOfYear())!
     }
 }
-
-enum TimeRange {
-    case week, month, quarter, year, custom, all
-}
