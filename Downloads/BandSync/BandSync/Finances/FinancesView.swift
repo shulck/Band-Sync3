@@ -5,6 +5,8 @@ import FirebaseStorage
 
 struct FinancesView: View {
     @State private var selectedCategory: String?
+    @State private var selectedEvent: Event? = nil
+    @State private var events: [Event] = []
     @State private var selectedRecord: FinanceRecord?
     @State private var showingEditTransaction = false
     @State private var userRole: String = "Loading..."
@@ -15,7 +17,40 @@ struct FinancesView: View {
     @State private var totalExpenses: Double = 0
     @State private var selectedTimeRange: TimeRange = .month
     @State private var searchText = ""
-
+    
+    func fetchEvents() {
+        let db = Firestore.firestore()
+        db.collection("events").getDocuments { snapshot, error in
+            if let error = error {
+                print("Error fetching events: \(error.localizedDescription)")
+                return
+            }
+            
+            events = snapshot?.documents.compactMap { document -> Event? in
+                let data = document.data()
+                return Event(from: data, id: document.documentID)
+            } ?? []
+        }
+    }
+    struct EventFilterChip: View {
+        var title: String
+        var isSelected: Bool
+        var action: () -> Void
+        
+        var body: some View {
+            Button(action: action) {
+                HStack {
+                    Text(title)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isSelected ? Color.blue : Color(.systemGray5))
+                .foregroundColor(isSelected ? .white : .primary)
+                .cornerRadius(20)
+            }
+        }
+    }
     var currencies = ["USD", "EUR", "UAH"]
     
     var allCategories: [String] {
@@ -40,9 +75,13 @@ struct FinancesView: View {
             result = result.filter { $0.category == category }
         }
         
+        // Фильтр по событию
+        if let event = selectedEvent {
+            result = result.filter { $0.eventId == event.id }
+        }
+        
         return result
     }
-        
     var body: some View {
         NavigationView {
             VStack {
@@ -81,6 +120,34 @@ struct FinancesView: View {
                         .cornerRadius(8)
                         .padding(.horizontal)
                     
+                    // Фильтр по событиям, если есть связанные события
+                    if !events.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                // Кнопка "Все"
+                                EventFilterChip(
+                                    title: "Все события",
+                                    isSelected: selectedEvent == nil,
+                                    action: { selectedEvent = nil }
+                                )
+                                
+                                // Фильтр по событиям
+                                ForEach(events.filter { event in
+                                    finances.contains { $0.eventId == event.id }
+                                }) { event in
+                                    EventFilterChip(
+                                        title: event.title,
+                                        isSelected: selectedEvent?.id == event.id,
+                                        action: {
+                                            selectedEvent = (selectedEvent?.id == event.id) ? nil : event
+                                        }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .padding(.vertical, 8)
+                    }
                     CategoryFilterView(selectedCategory: $selectedCategory, categories: allCategories)
                         .padding(.vertical, 8)
                     
@@ -115,11 +182,21 @@ struct FinancesView: View {
                 }
             }
             .navigationTitle("Finances")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        fetchFinances()
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+            }
             .onAppear {
                 fetchUserRole()
-                fetchFinances()
-                updateCurrencyRates()
-            }
+                    fetchFinances()
+                    fetchEvents()
+                    updateCurrencyRates()
+                }
             .onChange(of: selectedTimeRange) { _ in
                 calculateTotals()
             }
@@ -147,6 +224,27 @@ struct FinancesView: View {
 
     func calculateTotals() {
         let filteredRecords = filterRecordsByTimeRange(finances)
+        // Ограничьте сумму явным перечислением значений
+            var sumIncome = 0.0
+            for record in filteredRecords where record.type == .income {
+                sumIncome += record.amount
+                // Здесь можно убедиться, что используются правильные значения
+            }
+            totalIncome = sumIncome
+            
+            totalExpenses = filteredRecords.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+        // Отладочные выводы
+           print("Все транзакции: \(finances.count)")
+           print("Отфильтрованные транзакции: \(filteredRecords.count)")
+           print("Транзакции дохода: \(filteredRecords.filter { $0.type == .income }.count)")
+           print("Общий доход: \(totalIncome)")
+           print("Общие расходы: \(totalExpenses)")
+           
+           // Вывод каждой транзакции дохода для проверки
+           print("Детали транзакций дохода:")
+           for (index, transaction) in filteredRecords.filter({ $0.type == .income }).enumerated() {
+               print("[\(index)] \(transaction.description): \(transaction.amount) \(transaction.currency)")
+           }
         
         // Временная переменная для подсчета итогов
         var totalIncomeTmp: Double = 0
@@ -298,164 +396,114 @@ struct FinancesView: View {
             }
         }
     }
-
     func fetchFinances() {
-        guard let user = Auth.auth().currentUser else { return }
-
+        // Сбросить текущие данные
+        finances = []
+        
+        guard let user = Auth.auth().currentUser else {
+            print("CRITICAL: Пользователь не авторизован")
+            return
+        }
+        
+        print("Загрузка финансов для пользователя: \(user.uid)")
+        
         let db = Firestore.firestore()
-        db.collection("finances")
-            .whereField("userId", isEqualTo: user.uid)
-            .order(by: "date", descending: true)
-            .getDocuments { snapshot, error in
-                if let error = error {
-                    print("Error fetching finances: \(error.localizedDescription)")
-                    return
-                }
-
-                if let snapshot = snapshot {
-                    self.finances = snapshot.documents.compactMap { document -> FinanceRecord? in
-                        let data = document.data()
-
-                        guard let typeString = data["type"] as? String,
-                              let amount = data["amount"] as? Double,
-                              let currency = data["currency"] as? String,
-                              let description = data["description"] as? String,
-                              let category = data["category"] as? String,
-                              let timestamp = data["date"] as? Timestamp else {
-                            return nil
-                        }
-
-                        let type: FinanceType = typeString == "income" ? FinanceType.income : FinanceType.expense
-                        let date = timestamp.dateValue()
-                        let receiptImageURL = data["receiptImageURL"] as? String
-                        let eventId = data["eventId"] as? String
-                        let eventTitle = data["eventTitle"] as? String
-                        let subcategory = data["subcategory"] as? String
-                        let tags = data["tags"] as? [String]
-
-                        return FinanceRecord(
-                            id: document.documentID,
-                            type: type,
-                            amount: amount,
-                            currency: currency,
-                            description: description,
-                            category: category,
-                            date: date,
-                            receiptImageURL: receiptImageURL,
-                            eventId: eventId,
-                            eventTitle: eventTitle,
-                            subcategory: subcategory,
-                            tags: tags
-                        )
-                    }
-                    
-                    // Sort by date
-                    self.finances = self.finances.sorted(by: { $0.date > $1.date })
-
-                    // If no data, load demo data
-                    if self.finances.isEmpty {
-                        // Uncomment if you want demo data
-                        // self.loadDemoData()
-                    }
-
-                    self.calculateTotals()
-                }
+        
+        // Намеренно не фильтруем по userId, чтобы увидеть все записи
+        db.collection("finances").getDocuments { snapshot, error in
+            if let error = error {
+                print("ОШИБКА: \(error.localizedDescription)")
+                return
             }
+            
+            guard let documents = snapshot?.documents else {
+                print("ИНФО: Документы не найдены")
+                return
+            }
+            
+            print("ИНФО: Получено \(documents.count) документов")
+            
+            var tempRecords: [FinanceRecord] = []
+            
+            for document in documents {
+                let data = document.data()
+                print("ОБРАБОТКА: Документ \(document.documentID)")
+                print("ДАННЫЕ: \(data)")
+                
+                // Проверяем userId
+                if let docUserId = data["userId"] as? String {
+                    print("ПОЛЬЗОВАТЕЛЬ документа: \(docUserId)")
+                    print("ТЕКУЩИЙ пользователь: \(user.uid)")
+                    if docUserId != user.uid {
+                        print("ПРОПУСК: Документ принадлежит другому пользователю")
+                        continue
+                    }
+                } else {
+                    print("ПРОПУСК: Документ без userId")
+                    continue
+                }
+                
+                // Пробуем загрузить все необходимые поля
+                guard let typeString = data["type"] as? String,
+                      let amount = data["amount"] as? Double,
+                      let description = data["description"] as? String,
+                      let category = data["category"] as? String else {
+                    print("ПРОПУСК: В документе отсутствуют обязательные поля")
+                    continue
+                }
+                
+                // Валюта (со значением по умолчанию)
+                let currency = data["currency"] as? String ?? "USD"
+                
+                // Дата (со значением по умолчанию)
+                let date: Date
+                if let timestamp = data["date"] as? Timestamp {
+                    date = timestamp.dateValue()
+                } else {
+                    date = Date()
+                }
+                
+                // Тип транзакции
+                let type: FinanceType = typeString == "income" ? .income : .expense
+                
+                // Необязательные поля
+                let receiptImageURL = data["receiptImageURL"] as? String
+                let eventId = data["eventId"] as? String
+                let eventTitle = data["eventTitle"] as? String
+                let subcategory = data["subcategory"] as? String
+                let tags = data["tags"] as? [String]
+                
+                print("ИНФОРМАЦИЯ СОБЫТИЯ: id=\(eventId ?? "нет"), название=\(eventTitle ?? "нет")")
+                
+                // Создаем запись
+                let record = FinanceRecord(
+                    id: document.documentID,
+                    type: type,
+                    amount: amount,
+                    currency: currency,
+                    description: description,
+                    category: category,
+                    date: date,
+                    receiptImageURL: receiptImageURL,
+                    eventId: eventId,
+                    eventTitle: eventTitle,
+                    subcategory: subcategory,
+                    tags: tags
+                )
+                
+                tempRecords.append(record)
+                print("ДОБАВЛЕНО: Запись \(record.id) с описанием '\(record.description)'")
+            }
+            
+            // Сортировка и обновление UI
+            DispatchQueue.main.async {
+                self.finances = tempRecords.sorted(by: { $0.date > $1.date })
+                print("ИТОГО: Загружено \(self.finances.count) финансовых записей")
+                self.calculateTotals()
+            }
+        }
     }
-
-    func loadDemoData() {
-        let now = Date()
-        let calendar = Calendar.current
-
-        let demoData: [FinanceRecord] = [
-            FinanceRecord(
-                id: "1",
-                type: .income,
-                amount: 1200,
-                currency: "USD",
-                description: "Concert at Club X",
-                category: "Gig",
-                date: now,
-                receiptImageURL: nil,
-                eventId: nil,
-                eventTitle: nil,
-                subcategory: nil,
-                tags: nil
-            ),
-            FinanceRecord(
-                id: "2",
-                type: .expense,
-                amount: 300,
-                currency: "USD",
-                description: "Transportation",
-                category: "Logistics",
-                date: calendar.date(byAdding: .day, value: -2, to: now)!,
-                receiptImageURL: nil,
-                eventId: nil,
-                eventTitle: nil,
-                subcategory: nil,
-                tags: nil
-            ),
-            FinanceRecord(
-                id: "3",
-                type: .expense,
-                amount: 180,
-                currency: "USD",
-                description: "Hotel",
-                category: "Accommodation",
-                date: calendar.date(byAdding: .day, value: -2, to: now)!,
-                receiptImageURL: nil,
-                eventId: nil,
-                eventTitle: nil,
-                subcategory: nil,
-                tags: nil
-            ),
-            FinanceRecord(
-                id: "4",
-                type: .income,
-                amount: 950,
-                currency: "USD",
-                description: "Festival Performance",
-                category: "Gig",
-                date: calendar.date(byAdding: .day, value: -10, to: now)!,
-                receiptImageURL: nil,
-                eventId: nil,
-                eventTitle: nil,
-                subcategory: nil,
-                tags: nil
-            ),
-            FinanceRecord(
-                id: "5",
-                type: .expense,
-                amount: 120,
-                currency: "USD",
-                description: "Equipment Rental",
-                category: "Equipment",
-                date: calendar.date(byAdding: .day, value: -12, to: now)!,
-                receiptImageURL: nil,
-                eventId: nil,
-                eventTitle: nil,
-                subcategory: nil,
-                tags: nil
-            ),
-            FinanceRecord(
-                id: "6",
-                type: .income,
-                amount: 350,
-                currency: "USD",
-                description: "Merchandise Sales",
-                category: "Merchandise",
-                date: calendar.date(byAdding: .day, value: -15, to: now)!,
-                receiptImageURL: nil,
-                eventId: nil,
-                eventTitle: "Local Music Fair",
-                subcategory: "T-Shirts",
-                tags: ["merchandise", "sales"]
-            )
-        ]
-
-        finances = demoData
-    }
+    
 
     func saveFinanceRecord(_ record: FinanceRecord) {
         guard let user = Auth.auth().currentUser else { return }

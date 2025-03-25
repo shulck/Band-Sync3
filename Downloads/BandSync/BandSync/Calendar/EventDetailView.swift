@@ -248,7 +248,18 @@ struct EventDetailView: View {
                         .cornerRadius(12)
                         .padding(.vertical, 4)
                 }
-                
+                // Финансовая секция
+                NavigationLink(destination: EventFinancesView(event: event)) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Финансы", systemImage: "dollarsign.circle")
+                            .font(.headline)
+                        
+                        Text("Просмотр доходов и расходов, связанных с событием")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                }
                 // Кнопки действий
                 HStack {
                     Button(action: {
