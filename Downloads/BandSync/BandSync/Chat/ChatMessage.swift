@@ -7,6 +7,7 @@ enum MessageStatus: String, Codable {
     case delivered = "delivered"
     case read = "read"
     case failed = "failed"
+    case edited = "edited" // Новый статус для редактированных сообщений
 }
 
 struct ChatMessage: Identifiable, Codable {

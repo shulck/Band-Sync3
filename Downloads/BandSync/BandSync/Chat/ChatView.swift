@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import FirebaseAuth
 import FirebaseFirestore
 
@@ -9,6 +10,7 @@ struct ChatView: View {
     @State private var showingParticipants = false
     @State private var showEmojiPicker = false
     @State private var scrollToBottom = true
+    @State private var editingMessage: ChatMessage?
 
     private var isCurrentUserInChat: Bool {
         guard let currentUserId = chatService.currentUserId else { return false }
@@ -36,18 +38,31 @@ struct ChatView: View {
                         .disabled(chatService.isLoading)
                         .padding(.top, 8)
                     }
-                    
+
                     LazyVStack(spacing: 8) {
                         ForEach(chatService.messages) { message in
-                            MessageBubble(message: message,
-                                          isFromCurrentUser: message.senderId == chatService.currentUserId)
-                                .id(message.id) // для автоскролла
-                                .onTapGesture {
-                                    // Повторная отправка при ошибке
-                                    if message.status == .failed && message.senderId == chatService.currentUserId {
-                                        chatService.resendMessage(message, in: chatRoom.id)
+                            MessageBubble(
+                                message: message,
+                                isFromCurrentUser: message.senderId == chatService.currentUserId,
+                                onEdit: {
+                                    if message.senderId == chatService.currentUserId {
+                                        editingMessage = message
+                                        messageText = message.text
+                                    }
+                                },
+                                onDelete: {
+                                    if message.senderId == chatService.currentUserId {
+                                        chatService.deleteMessage(messageId: message.id, in: chatRoom.id)
                                     }
                                 }
+                            )
+                            .id(message.id) // для автоскролла
+                            .onTapGesture {
+                                // Повторная отправка при ошибке
+                                if message.status == .failed && message.senderId == chatService.currentUserId {
+                                    chatService.resendMessage(message, in: chatRoom.id)
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal)
@@ -75,7 +90,7 @@ struct ChatView: View {
                             .padding(.horizontal)
                             .padding(.top, 4)
                     }
-                    
+
                     HStack {
                         // Кнопка выбора смайликов
                         Button(action: {
@@ -86,14 +101,14 @@ struct ChatView: View {
                                 .foregroundColor(.blue)
                                 .padding(8)
                         }
-                        
-                        TextField("Сообщение...", text: $messageText)
+
+                        TextField(editingMessage != nil ? "Редактировать..." : "Сообщение...", text: $messageText)
                             .padding(10)
                             .background(Color(.systemGray6))
                             .cornerRadius(20)
-                        
+
                         Button(action: sendMessage) {
-                            Image(systemName: "paperplane.fill")
+                            Image(systemName: editingMessage != nil ? "pencil" : "paperplane.fill")
                                 .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
                                 .padding(10)
                         }
@@ -101,7 +116,7 @@ struct ChatView: View {
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 8)
-                    
+
                     // Панель эмодзи
                     if showEmojiPicker {
                         EmojiPickerView(onEmojiSelected: { emoji in
@@ -126,7 +141,7 @@ struct ChatView: View {
                     }
                 }
             }
-            
+
             ToolbarItem(placement: .navigationBarTrailing) {
                 Toggle(isOn: $scrollToBottom) {
                     Image(systemName: "arrow.down.to.line")
@@ -149,16 +164,30 @@ struct ChatView: View {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
-        chatService.sendMessage(text: trimmedText, in: chatRoom.id)
+        if let editingMessage = editingMessage {
+            // Режим редактирования
+            chatService.editMessage(
+                messageId: editingMessage.id,
+                in: chatRoom.id,
+                newText: trimmedText
+            )
+            self.editingMessage = nil
+        } else {
+            // Отправка нового сообщения
+            chatService.sendMessage(text: trimmedText, in: chatRoom.id)
+        }
+
         messageText = ""
         scrollToBottom = true // Включаем автоскролл при отправке сообщения
     }
 }
 
-// Компонент пузыря сообщения
+// Обновленная структура MessageBubble
 struct MessageBubble: View {
     let message: ChatMessage
     let isFromCurrentUser: Bool
+    let onEdit: (() -> Void)?
+    let onDelete: (() -> Void)?
 
     var body: some View {
         HStack {
@@ -180,7 +209,20 @@ struct MessageBubble: View {
                         .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
                         .foregroundColor(isFromCurrentUser ? .white : .primary)
                         .cornerRadius(16)
-                    
+                        .contextMenu {
+                            // Контекстное меню только для сообщений текущего пользователя
+                            if isFromCurrentUser {
+                                Button(action: onEdit ?? {}) {
+                                    Text("Изменить")
+                                    Image(systemName: "pencil")
+                                }
+                                Button(action: onDelete ?? {}) {
+                                    Text("Удалить")
+                                    Image(systemName: "trash")
+                                }
+                            }
+                        }
+
                     // Индикатор статуса сообщения (только для своих сообщений)
                     if isFromCurrentUser {
                         statusIcon
@@ -199,7 +241,7 @@ struct MessageBubble: View {
             }
         }
     }
-    
+
     private var statusIcon: some View {
         Group {
             switch message.status {
@@ -218,6 +260,9 @@ struct MessageBubble: View {
             case .failed:
                 Image(systemName: "exclamationmark.circle")
                     .foregroundColor(.red)
+            case .edited:
+                Image(systemName: "pencil.circle.fill")
+                    .foregroundColor(.blue)
             }
         }
     }
@@ -229,13 +274,15 @@ struct MessageBubble: View {
     }
 }
 
+// Остальной код EmojiPickerView остается без изменений
+
 // Создаем компонент для выбора эмодзи
 struct EmojiPickerView: View {
     var onEmojiSelected: (String) -> Void
-    
+
     // Наиболее используемые эмодзи для рабочего чата
     private let frequentEmojis = ["👍", "👏", "🙌", "🤝", "👀", "👋", "🙂", "😊", "😁", "😄", "😎", "🤔", "🧐", "⏰", "📝", "✅", "❌", "‼️", "❓", "🔥"]
-    
+
     // Категории эмодзи
     private let emojiCategories: [String: [String]] = [
         "Частые": ["👍", "👏", "🙌", "🤝", "👀", "👋", "🙂", "😊", "😁", "😄", "😎", "🤔", "🧐", "⏰", "📝", "✅", "❌", "‼️", "❓", "🔥"],
@@ -244,9 +291,9 @@ struct EmojiPickerView: View {
         "Символы": ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "☮️", "✝️", "☪️", "🕉️", "☸️", "✡️", "🔯", "☯️", "☦️"],
         "Объекты": ["⏰", "📱", "💻", "⌨️", "🖥️", "🖨️", "📷", "🔋", "🔌", "💡", "🔦", "📚", "📝", "✏️", "📊", "📈", "📉", "🔑", "🔒", "🔓"]
     ]
-    
+
     @State private var selectedCategory = "Частые"
-    
+
     var body: some View {
         VStack(spacing: 8) {
             // Линия-индикатор, что панель можно скрыть
@@ -254,7 +301,7 @@ struct EmojiPickerView: View {
                 .fill(Color.gray.opacity(0.3))
                 .frame(width: 40, height: 4)
                 .padding(.top, 4)
-            
+
             // Категории эмодзи
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
@@ -269,7 +316,7 @@ struct EmojiPickerView: View {
                 }
                 .padding(.horizontal)
             }
-            
+
             // Сетка эмодзи
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 10), spacing: 8) {
                 ForEach(emojiCategories[selectedCategory] ?? [], id: \.self) { emoji in

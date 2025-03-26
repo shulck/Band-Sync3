@@ -6,6 +6,11 @@ struct ChatListView: View {
     @State private var showingNewChatView = false
     @State private var searchText = ""
     @State private var unreadCounts: [String: Int] = [:]
+    @State private var showDeleteAlert = false
+    @State private var chatToDelete: ChatRoom?
+    @State private var showEditChat = false
+    @State private var chatToEdit: ChatRoom?
+    @State private var editChatName = ""
 
     var filteredChatRooms: [ChatRoom] {
         if searchText.isEmpty {
@@ -28,15 +33,15 @@ struct ChatListView: View {
                         Image(systemName: "message.circle")
                             .font(.system(size: 72))
                             .foregroundColor(.gray)
-                        
+
                         Text("У вас пока нет чатов")
                             .font(.headline)
-                        
+
                         Text("Создайте новый чат, чтобы начать общение")
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
-                        
+
                         Button(action: {
                             showingNewChatView = true
                         }) {
@@ -60,14 +65,14 @@ struct ChatListView: View {
                                             .foregroundColor(.white)
                                             .frame(width: 40, height: 40)
                                             .background(Circle().fill(Color.blue))
-                                        
+
                                         // Индикатор непрочитанных сообщений
                                         if let unreadCount = unreadCounts[chatRoom.id], unreadCount > 0 {
                                             ZStack {
                                                 Circle()
                                                     .fill(Color.red)
                                                     .frame(width: 20, height: 20)
-                                                
+
                                                 Text("\(unreadCount)")
                                                     .font(.caption2)
                                                     .foregroundColor(.white)
@@ -98,6 +103,43 @@ struct ChatListView: View {
                                     }
                                 }
                                 .padding(.vertical, 4)
+                                .contextMenu {
+                                    if chatRoom.isGroupChat {
+                                        Button(action: {
+                                            chatToEdit = chatRoom
+                                            editChatName = chatRoom.name
+                                            showEditChat = true
+                                        }) {
+                                            Label("Редактировать", systemImage: "pencil")
+                                        }
+                                    }
+
+                                    Button(role: .destructive, action: {
+                                        chatToDelete = chatRoom
+                                        showDeleteAlert = true
+                                    }) {
+                                        Label("Удалить", systemImage: "trash")
+                                    }
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    chatToDelete = chatRoom
+                                    showDeleteAlert = true
+                                } label: {
+                                    Label("Удалить", systemImage: "trash")
+                                }
+
+                                if chatRoom.isGroupChat {
+                                    Button {
+                                        chatToEdit = chatRoom
+                                        editChatName = chatRoom.name
+                                        showEditChat = true
+                                    } label: {
+                                        Label("Изменить", systemImage: "pencil")
+                                    }
+                                    .tint(.blue)
+                                }
                             }
                         }
                     }
@@ -122,6 +164,35 @@ struct ChatListView: View {
             .sheet(isPresented: $showingNewChatView) {
                 NewChatView(chatService: chatService)
             }
+            .alert("Удалить чат?", isPresented: $showDeleteAlert) {
+                Button("Отмена", role: .cancel) {}
+                Button("Удалить", role: .destructive) {
+                    if let chatId = chatToDelete?.id {
+                        deleteChat(chatId: chatId)
+                    }
+                }
+            } message: {
+                Text("Вы уверены, что хотите удалить чат? Это действие невозможно отменить.")
+            }
+            .sheet(isPresented: $showEditChat) {
+                if let chatRoom = chatToEdit {
+                    EditChatView(
+                        chatService: chatService,
+                        chatId: chatRoom.id,
+                        chatName: $editChatName,
+                        onSave: { success in
+                            if success {
+                                // Подождем немного и обновим список
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    chatService.fetchChatRooms()
+                                }
+                            }
+                            // Очищаем ссылку на редактируемый чат
+                            chatToEdit = nil
+                        }
+                    )
+                }
+            }
             .onAppear {
                 chatService.fetchChatRooms()
                 loadUnreadCounts()
@@ -138,7 +209,7 @@ struct ChatListView: View {
                                 .padding()
                                 .background(Color.red.opacity(0.8))
                                 .cornerRadius(8)
-                            
+
                             Spacer()
                         }
                         .padding(.top)
@@ -164,7 +235,7 @@ struct ChatListView: View {
             return formatter.string(from: date)
         }
     }
-    
+
     // Загрузка количества непрочитанных сообщений для всех чатов
     private func loadUnreadCounts() {
         for chatRoom in chatService.chatRooms {
@@ -172,6 +243,16 @@ struct ChatListView: View {
                 DispatchQueue.main.async {
                     unreadCounts[chatRoom.id] = count
                 }
+            }
+        }
+    }
+
+    // Удаление чата
+    private func deleteChat(chatId: String) {
+        chatService.deleteChat(chatId: chatId) { success in
+            if success {
+                // Обновление происходит автоматически через listener
+                chatToDelete = nil
             }
         }
     }
