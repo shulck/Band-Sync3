@@ -9,13 +9,16 @@ struct MerchandiseInventoryView: View {
     @State private var selectedCategory: String?
     @State private var searchText = ""
     @State private var showingItemDetail: MerchandiseItem? = nil
-    
+    @State private var selectedCurrency = "USD"
+
     // All available merchandise categories
     let categories = ["Clothing", "Accessories", "Music", "Other"]
-    
+    // Available currencies
+    let currencies = ["USD", "EUR", "GBP", "JPY", "RUB"]
+
     var filteredItems: [MerchandiseItem] {
         var result = items
-        
+
         if !searchText.isEmpty {
             result = result.filter { item in
                 item.name.lowercased().contains(searchText.lowercased()) ||
@@ -23,14 +26,14 @@ struct MerchandiseInventoryView: View {
                 item.subcategory.lowercased().contains(searchText.lowercased())
             }
         }
-        
+
         if let category = selectedCategory {
             result = result.filter { $0.category == category }
         }
-        
+
         return result
     }
-    
+
     var body: some View {
         VStack {
             if isLoading {
@@ -43,7 +46,7 @@ struct MerchandiseInventoryView: View {
                         .background(Color(.systemGray6))
                         .cornerRadius(8)
                         .padding(.horizontal)
-                    
+
                     // Category filter
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 10) {
@@ -53,7 +56,7 @@ struct MerchandiseInventoryView: View {
                             ) {
                                 selectedCategory = nil
                             }
-                            
+
                             ForEach(categories, id: \.self) { category in
                                 FilterChip(
                                     title: category,
@@ -66,11 +69,11 @@ struct MerchandiseInventoryView: View {
                         .padding(.horizontal)
                     }
                     .padding(.vertical, 8)
-                    
+
                     // Inventory summary
-                    InventorySummaryView(items: items)
+                    InventorySummaryView(items: items, currency: selectedCurrency)
                         .padding()
-                    
+
                     // List of items
                     if filteredItems.isEmpty {
                         VStack {
@@ -82,7 +85,7 @@ struct MerchandiseInventoryView: View {
                     } else {
                         List {
                             ForEach(filteredItems) { item in
-                                MerchandiseItemRow(item: item)
+                                MerchandiseItemRow(item: item, currency: selectedCurrency)
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         showingItemDetail = item
@@ -91,16 +94,42 @@ struct MerchandiseInventoryView: View {
                             .onDelete(perform: deleteItems)
                         }
                     }
-                    
-                    Button(action: {
-                        showingAddItemSheet = true
-                    }) {
-                        Text("Add New Item")
-                            .frame(maxWidth: .infinity)
+
+                    HStack {
+                        Button(action: {
+                            showingAddItemSheet = true
+                        }) {
+                            Text("Add New Item")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                        }
+
+                        Menu {
+                            ForEach(currencies, id: \.self) { currency in
+                                Button(action: {
+                                    selectedCurrency = currency
+                                }) {
+                                    HStack {
+                                        Text(currency)
+                                        if selectedCurrency == currency {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text(selectedCurrency)
+                                Image(systemName: "arrow.down.circle.fill")
+                            }
                             .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
+                            .frame(minWidth: 80)
+                            .background(Color(.systemGray6))
                             .cornerRadius(8)
+                        }
                     }
                     .padding()
                 }
@@ -121,25 +150,25 @@ struct MerchandiseInventoryView: View {
             }
         }
     }
-    
+
     func fetchInventory() {
         isLoading = true
-        
+
         let db = Firestore.firestore()
         db.collection("merchandise").getDocuments { snapshot, error in
             isLoading = false
-            
+
             if let error = error {
                 print("Error fetching merchandise: \(error.localizedDescription)")
                 return
             }
-            
+
             self.items = snapshot?.documents.compactMap { document in
                 return MerchandiseItem(document: document)
             } ?? []
         }
     }
-    
+
     func addItem(_ item: MerchandiseItem) {
         let db = Firestore.firestore()
         db.collection("merchandise").document(item.id).setData(item.asDictionary) { error in
@@ -151,7 +180,7 @@ struct MerchandiseInventoryView: View {
             }
         }
     }
-    
+
     func updateItem(_ item: MerchandiseItem) {
         let db = Firestore.firestore()
         db.collection("merchandise").document(item.id).setData(item.asDictionary) { error in
@@ -165,10 +194,10 @@ struct MerchandiseInventoryView: View {
             }
         }
     }
-    
+
     func deleteItems(at offsets: IndexSet) {
         let itemsToDelete = offsets.map { filteredItems[$0] }
-        
+
         let db = Firestore.firestore()
         for item in itemsToDelete {
             db.collection("merchandise").document(item.id).delete { error in
@@ -177,7 +206,7 @@ struct MerchandiseInventoryView: View {
                 }
             }
         }
-        
+
         // Remove from local array
         for item in itemsToDelete {
             if let index = items.firstIndex(where: { $0.id == item.id }) {
@@ -189,25 +218,26 @@ struct MerchandiseInventoryView: View {
 
 struct InventorySummaryView: View {
     var items: [MerchandiseItem]
-    
+    var currency: String
+
     var totalItems: Int {
         items.reduce(0) { $0 + $1.quantity }
     }
-    
+
     var totalValue: Double {
         items.reduce(0) { $0 + $1.inventoryValue }
     }
-    
+
     var totalPotentialRevenue: Double {
         items.reduce(0) { $0 + $1.potentialRevenue }
     }
-    
+
     var body: some View {
         VStack(spacing: 10) {
             Text("Inventory Summary")
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            
+
             HStack(spacing: 20) {
                 VStack {
                     Text("Items")
@@ -217,7 +247,7 @@ struct InventorySummaryView: View {
                         .font(.headline)
                 }
                 .frame(maxWidth: .infinity)
-                
+
                 VStack {
                     Text("Cost Value")
                         .font(.caption)
@@ -226,7 +256,7 @@ struct InventorySummaryView: View {
                         .font(.headline)
                 }
                 .frame(maxWidth: .infinity)
-                
+
                 VStack {
                     Text("Potential Revenue")
                         .font(.caption)
@@ -241,58 +271,59 @@ struct InventorySummaryView: View {
         .background(Color(.systemGray6))
         .cornerRadius(10)
     }
-    
+
     func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        
+        formatter.currencyCode = currency
+
         return formatter.string(from: NSNumber(value: amount)) ?? "$\(amount)"
     }
 }
 
 struct MerchandiseItemRow: View {
     var item: MerchandiseItem
-    
+    var currency: String = "USD"
+
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
                 Text(item.name)
                     .font(.headline)
-                
+
                 HStack {
                     Text(item.category)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     Text("•")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
+
                     Text(item.subcategory)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing) {
                 Text("\(item.quantity) units")
                     .font(.subheadline)
-                
+
                 Text(formatPrice(item.sellingPrice))
                     .font(.subheadline)
                     .foregroundColor(.blue)
             }
         }
     }
-    
+
     func formatPrice(_ price: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        
+        formatter.currencyCode = currency
+
         return formatter.string(from: NSNumber(value: price)) ?? "$\(price)"
     }
 }
