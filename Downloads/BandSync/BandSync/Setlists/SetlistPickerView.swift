@@ -4,8 +4,16 @@ import FirebaseFirestore
 struct SetlistPickerView: View {
     @Environment(\.presentationMode) var presentationMode
     @Binding var selectedSetlist: [String]
+    @Binding var selectedSetlistId: String?
     @State private var availableSetlists: [Setlist] = []
-    @State private var selectedSetlistId: String?
+    @State private var localSelectedSetlistId: String?
+
+    // Добавляем инициализатор
+    init(selectedSetlist: Binding<[String]>, selectedSetlistId: Binding<String?> = .constant(nil)) {
+        self._selectedSetlist = selectedSetlist
+        self._selectedSetlistId = selectedSetlistId
+        self._localSelectedSetlistId = State(initialValue: selectedSetlistId.wrappedValue)
+    }
 
     var body: some View {
         NavigationView {
@@ -37,7 +45,8 @@ struct SetlistPickerView: View {
                     List {
                         ForEach(availableSetlists) { setlist in
                             Button(action: {
-                                selectedSetlistId = setlist.id
+                                // Используем localSelectedSetlistId вместо selectedSetlistId
+                                localSelectedSetlistId = setlist.id
                             }) {
                                 HStack {
                                     VStack(alignment: .leading) {
@@ -50,7 +59,8 @@ struct SetlistPickerView: View {
 
                                     Spacer()
 
-                                    if selectedSetlistId == setlist.id {
+                                    // Сравниваем с localSelectedSetlistId
+                                    if localSelectedSetlistId == setlist.id {
                                         Image(systemName: "checkmark")
                                             .foregroundColor(.blue)
                                     }
@@ -62,21 +72,24 @@ struct SetlistPickerView: View {
                     .listStyle(PlainListStyle())
 
                     Button(action: {
-                        if let selectedId = selectedSetlistId,
+                        // Используем localSelectedSetlistId
+                        if let selectedId = localSelectedSetlistId,
                            let setlist = availableSetlists.first(where: { $0.id == selectedId }) {
                             selectedSetlist = setlist.songs.map { $0.title }
+                            // Обновляем binding только при применении
+                            selectedSetlistId = selectedId
                             presentationMode.wrappedValue.dismiss()
                         }
                     }) {
                         Text("Apply Setlist")
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(selectedSetlistId == nil ? Color.gray : Color.blue)
+                            .background(localSelectedSetlistId == nil ? Color.gray : Color.blue)
                             .foregroundColor(.white)
                             .cornerRadius(8)
                             .padding(.horizontal)
                     }
-                    .disabled(selectedSetlistId == nil)
+                    .disabled(localSelectedSetlistId == nil)
                     .padding(.vertical)
                 }
             }

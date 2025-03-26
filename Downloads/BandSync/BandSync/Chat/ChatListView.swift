@@ -5,6 +5,7 @@ struct ChatListView: View {
     @StateObject private var chatService = ChatService()
     @State private var showingNewChatView = false
     @State private var searchText = ""
+    @State private var unreadCounts: [String: Int] = [:]
 
     var filteredChatRooms: [ChatRoom] {
         if searchText.isEmpty {
@@ -18,43 +19,97 @@ struct ChatListView: View {
 
     var body: some View {
         NavigationView {
-            List {
-                ForEach(filteredChatRooms) { chatRoom in
-                    NavigationLink(destination: ChatView(chatRoom: chatRoom)) {
-                        HStack {
-                            // Аватар чата (иконка группы или индивидуальная)
-                            Image(systemName: chatRoom.isGroupChat ? "person.3.fill" : "person.fill")
+            VStack {
+                if chatService.isLoading && chatService.chatRooms.isEmpty {
+                    ProgressView("Загрузка чатов...")
+                        .padding()
+                } else if chatService.chatRooms.isEmpty {
+                    VStack(spacing: 20) {
+                        Image(systemName: "message.circle")
+                            .font(.system(size: 72))
+                            .foregroundColor(.gray)
+                        
+                        Text("У вас пока нет чатов")
+                            .font(.headline)
+                        
+                        Text("Создайте новый чат, чтобы начать общение")
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        Button(action: {
+                            showingNewChatView = true
+                        }) {
+                            Text("Создать новый чат")
+                                .padding()
+                                .background(Color.blue)
                                 .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
-                                .background(Circle().fill(Color.blue))
+                                .cornerRadius(8)
+                        }
+                        .padding(.top)
+                    }
+                    .padding()
+                } else {
+                    List {
+                        ForEach(filteredChatRooms) { chatRoom in
+                            NavigationLink(destination: ChatView(chatRoom: chatRoom)) {
+                                HStack {
+                                    // Аватар чата (иконка группы или индивидуальная)
+                                    ZStack {
+                                        Image(systemName: chatRoom.isGroupChat ? "person.3.fill" : "person.fill")
+                                            .foregroundColor(.white)
+                                            .frame(width: 40, height: 40)
+                                            .background(Circle().fill(Color.blue))
+                                        
+                                        // Индикатор непрочитанных сообщений
+                                        if let unreadCount = unreadCounts[chatRoom.id], unreadCount > 0 {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(Color.red)
+                                                    .frame(width: 20, height: 20)
+                                                
+                                                Text("\(unreadCount)")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.white)
+                                                    .fontWeight(.bold)
+                                            }
+                                            .offset(x: 15, y: -15)
+                                        }
+                                    }
 
-                            VStack(alignment: .leading) {
-                                Text(chatRoom.name)
-                                    .font(.headline)
+                                    VStack(alignment: .leading) {
+                                        Text(chatRoom.name)
+                                            .font(.headline)
 
-                                if let lastMessage = chatRoom.lastMessage {
-                                    Text(lastMessage)
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
-                                        .lineLimit(1)
+                                        if let lastMessage = chatRoom.lastMessage {
+                                            Text(lastMessage)
+                                                .font(.subheadline)
+                                                .foregroundColor(.gray)
+                                                .lineLimit(1)
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    if let date = chatRoom.lastMessageDate {
+                                        Text(formatDate(date))
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
                                 }
-                            }
-
-                            Spacer()
-
-                            if let date = chatRoom.lastMessageDate {
-                                Text(formatDate(date))
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                .padding(.vertical, 4)
                             }
                         }
-                        .padding(.vertical, 4)
+                    }
+                    .listStyle(InsetGroupedListStyle())
+                    .refreshable {
+                        chatService.fetchChatRooms()
+                        loadUnreadCounts()
                     }
                 }
             }
-            .listStyle(InsetGroupedListStyle())
-            .navigationTitle("Chats")
-            .searchable(text: $searchText, prompt: "Search chats")
+            .navigationTitle("Чаты")
+            .searchable(text: $searchText, prompt: "Поиск чатов")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
@@ -69,10 +124,27 @@ struct ChatListView: View {
             }
             .onAppear {
                 chatService.fetchChatRooms()
+                loadUnreadCounts()
             }
             .onDisappear {
                 chatService.stopListening()
             }
+            .overlay(
+                Group {
+                    if !chatService.errorMessage.isEmpty {
+                        VStack {
+                            Text(chatService.errorMessage)
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.red.opacity(0.8))
+                                .cornerRadius(8)
+                            
+                            Spacer()
+                        }
+                        .padding(.top)
+                    }
+                }
+            )
         }
     }
 
@@ -85,11 +157,22 @@ struct ChatListView: View {
             formatter.dateFormat = "HH:mm"
             return formatter.string(from: date)
         } else if calendar.isDateInYesterday(date) {
-            return "Yesterday"
+            return "Вчера"
         } else {
             let formatter = DateFormatter()
             formatter.dateFormat = "dd.MM.yy"
             return formatter.string(from: date)
+        }
+    }
+    
+    // Загрузка количества непрочитанных сообщений для всех чатов
+    private func loadUnreadCounts() {
+        for chatRoom in chatService.chatRooms {
+            chatService.getUnreadMessagesCount(in: chatRoom.id) { count in
+                DispatchQueue.main.async {
+                    unreadCounts[chatRoom.id] = count
+                }
+            }
         }
     }
 }

@@ -12,9 +12,12 @@ struct EventDetailView: View {
     @State private var selectedReminderTime: ReminderTime = .oneHour
     @State private var notificationsEnabled = false
     @State private var eventSetlist: [String] = []
+    @State private var setlistName: String? = nil
+    @State private var isLoadingSetlist = false
+    @State private var selectedSetlistId: String? = nil
     
     private let notificationService = NotificationService.shared
-
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -41,7 +44,7 @@ struct EventDetailView: View {
                     }) {
                         Label(showingMap ? "Hide Map" : "Show on Map",
                               systemImage: showingMap ? "map.fill" : "map")
-                            .foregroundColor(.blue)
+                        .foregroundColor(.blue)
                     }
                     .padding(.top, 4)
                 }
@@ -147,22 +150,47 @@ struct EventDetailView: View {
                         Label("Setlist", systemImage: "music.note.list")
                             .font(.headline)
                         
-                        if eventSetlist.isEmpty {
+                        if isLoadingSetlist {
+                            ProgressView()
+                                .padding(.top, 4)
+                        } else if let name = setlistName {
+                            HStack {
+                                Text("🎵")
+                                Text(name)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                            
                             Button(action: {
                                 showingSetlistPicker = true
                             }) {
-                                Label("Connect Setlist", systemImage: "music.note.list")
+                                Label("Change Setlist", systemImage: "pencil")
+                                    .font(.caption)
                                     .foregroundColor(.blue)
                             }
-                            .padding(.top, 4)
-                        } else {
-                            ForEach(eventSetlist, id: \.self) { song in
-                                HStack {
-                                    Text("🎵")
-                                    Text(song)
-                                        .foregroundColor(.secondary)
+                        } else if let setlistId = event.setlistId {
+                            Text("Loading setlist...")
+                                .foregroundColor(.gray)
+                                .padding(.top, 4)
+                        } else if !eventSetlist.isEmpty {
+                            // Для обратной совместимости показываем первые несколько песен
+                            VStack(alignment: .leading) {
+                                Text("Setlist: \(eventSetlist.count) songs")
+                                    .foregroundColor(.secondary)
+                                
+                                // Показываем только первые 3 песни, если их много
+                                let displaySongs = eventSetlist.count > 3 ?
+                                Array(eventSetlist.prefix(3)) + ["...and \(eventSetlist.count - 3) more"] :
+                                eventSetlist
+                                
+                                ForEach(displaySongs, id: \.self) { song in
+                                    HStack {
+                                        Text("🎵")
+                                        Text(song)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.vertical, 1)
                                 }
-                                .padding(.vertical, 2)
                             }
                             
                             Button(action: {
@@ -172,6 +200,14 @@ struct EventDetailView: View {
                                     .font(.caption)
                                     .foregroundColor(.blue)
                             }
+                        } else {
+                            Button(action: {
+                                showingSetlistPicker = true
+                            }) {
+                                Label("Connect Setlist", systemImage: "music.note.list")
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.top, 4)
                         }
                     }
                 }
@@ -294,7 +330,7 @@ struct EventDetailView: View {
             EditEventView(event: event)
         }
         .sheet(isPresented: $showingSetlistPicker) {
-            SetlistPickerView(selectedSetlist: $eventSetlist)
+            SetlistPickerView(selectedSetlist: $eventSetlist, selectedSetlistId: $selectedSetlistId)
                 .onDisappear {
                     updateSetlist()
                 }
@@ -305,6 +341,40 @@ struct EventDetailView: View {
         .onAppear {
             checkNotificationStatus()
             eventSetlist = event.setlist
+            selectedSetlistId = event.setlistId
+            
+            // Загружаем название сетлиста, если есть setlistId
+            if let setlistId = event.setlistId {
+                isLoadingSetlist = true
+                fetchSetlistName(setlistId: setlistId) { name in
+                    DispatchQueue.main.async {
+                        self.setlistName = name
+                        self.isLoadingSetlist = false
+                    }
+                }
+            } else {
+                // Используем кэшированное название, если есть
+                setlistName = event.setlistName
+            }
+        }
+    }
+    
+    // ПЕРЕМЕСТИТЕ ВСЕ ФУНКЦИИ СЮДА, ВНЕ BODY
+    
+    func fetchSetlistName(setlistId: String, completion: @escaping (String?) -> Void) {
+        guard !setlistId.isEmpty else {
+            completion(nil)
+            return
+        }
+        
+        let db = Firestore.firestore()
+        db.collection("setlists").document(setlistId).getDocument { document, error in
+            if let document = document, document.exists, let data = document.data() {
+                let setlistName = data["name"] as? String
+                completion(setlistName)
+            } else {
+                completion(nil)
+            }
         }
     }
     
@@ -340,198 +410,229 @@ struct EventDetailView: View {
     // Обновление сетлиста события
     func updateSetlist() {
         let db = Firestore.firestore()
-        db.collection("events").document(event.id).updateData([
-            "setlist": eventSetlist
-        ]) { error in
-            if let error = error {
-                print("❌ Ошибка при обновлении сетлиста: \(error.localizedDescription)")
-            } else {
-                print("✅ Сетлист события успешно обновлен")
-            }
-        }
-    }
-    
-    // Проверка статуса уведомлений
-    private func checkNotificationStatus() {
-        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-            DispatchQueue.main.async {
-                let hasNotification = requests.contains { $0.identifier.starts(with: "event-\(event.id)") }
-                notificationsEnabled = hasNotification
-            }
-        }
-    }
-    
-    // Звонок по номеру телефона
-    private func callPhoneNumber(_ phoneNumber: String) {
-        let formattedPhone = phoneNumber.replacingOccurrences(of: " ", with: "")
-        if let url = URL(string: "tel://\(formattedPhone)"), UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url)
-        }
-    }
-    
-    // Отправка email
-    private func sendEmail(_ email: String) {
-        if let url = URL(string: "mailto:\(email)"), UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url)
-        }
-    }
-    
-    // Поделиться событием
-    private func shareEvent() {
-        // Создаем текст для шаринга
-        let shareText = """
-        Event: \(event.title)
-        Type: \(event.type)
-        Date: \(event.date.formatted(date: .long, time: .shortened))
-        Location: \(event.location)
-        """
         
-        // Создаем ссылку или любой другой контент для шаринга
-        let items: [Any] = [shareText]
-        
-        // Показываем стандартный UI для шаринга
-        let activityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        
-        // Находим rootViewController для представления UI шаринга
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
-            rootViewController.present(activityViewController, animated: true, completion: nil)
-        }
-    }
-    
-    // Удаление события
-    func deleteEvent() {
-        // Создаем алерт для подтверждения
-        let alert = UIAlertController(
-            title: "Delete Event?",
-            message: "This action cannot be undone",
-            preferredStyle: .alert
-        )
-        
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
-            // Удаляем событие из Firebase
-            Firestore.firestore().collection("events").document(event.id).delete { error in
-                if error == nil {
-                    // Удаляем связанные уведомления
-                    NotificationService.shared.cancelEventNotifications(for: event.id)
-                    
-                    // Закрываем окно с деталями события
-                    presentationMode.wrappedValue.dismiss()
+        if let selectedId = selectedSetlistId {
+            // Обновляем документ события с ID сетлиста и (опционально) списком песен
+            db.collection("events").document(event.id).updateData([
+                "setlistId": selectedId,
+                "setlist": eventSetlist // для обратной совместимости
+            ]) { error in
+                if let error = error {
+                    print("❌ Ошибка при обновлении сетлиста: \(error.localizedDescription)")
                 } else {
-                    print("❌ Delete failed: \(error!.localizedDescription)")
-                }
-            }
-        })
-        
-        // Показываем алерт
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
-            rootViewController.present(alert, animated: true, completion: nil)
-        }
-    }
-}
-// Добавьте в конец файла
-struct NotificationSettingsView: View {
-    let event: Event
-    @Environment(\.presentationMode) var presentationMode
-    @State private var isNotificationsAuthorized = false
-    @State private var selectedReminderTime: ReminderTime = .oneHour
-    @State private var enableNotification = true
-    
-    private let notificationService = NotificationService.shared
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Reminder Settings")) {
-                    Toggle("Enable Event Reminder", isOn: $enableNotification)
-                        .disabled(!isNotificationsAuthorized)
-                    
-                    if enableNotification {
-                        Picker("Remind Me", selection: $selectedReminderTime) {
-                            ForEach(ReminderTime.allCases) { time in
-                                Text(time.rawValue).tag(time)
-                            }
-                        }
-                        .disabled(!isNotificationsAuthorized)
-                    }
-                }
-                
-                if !isNotificationsAuthorized {
-                    Section {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Notifications Disabled")
-                                .font(.headline)
-                                .foregroundColor(.red)
-                            
-                            Text("Please enable notifications in system settings to receive event reminders.")
-                                .font(.caption)
-                            
-                            Button("Open Settings") {
-                                if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                                    UIApplication.shared.open(settingsURL)
+                                    print("✅ Сетлист события успешно обновлен")
+                                    
+                                    // После сохранения ID сетлиста, загружаем его название
+                                    fetchSetlistName(setlistId: selectedId) { name in
+                                        if let name = name {
+                                            DispatchQueue.main.async {
+                                                self.setlistName = name
+                                                
+                                                // Также сохраняем название сетлиста в документе события для кэширования
+                                                db.collection("events").document(event.id).updateData([
+                                                    "setlistName": name
+                                                ])
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            .padding(.vertical, 8)
+                        } else {
+                            // Если нет выбранного ID сетлиста, но есть песни (старый вариант)
+                            db.collection("events").document(event.id).updateData([
+                                "setlist": eventSetlist
+                            ]) { error in
+                                if let error = error {
+                                    print("❌ Ошибка при обновлении сетлиста: \(error.localizedDescription)")
+                                } else {
+                                    print("✅ Сетлист события успешно обновлен")
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Проверка статуса уведомлений
+                    private func checkNotificationStatus() {
+                        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                            DispatchQueue.main.async {
+                                let hasNotification = requests.contains { $0.identifier.starts(with: "event-\(event.id)") }
+                                notificationsEnabled = hasNotification
+                            }
+                        }
+                    }
+                    
+                    // Звонок по номеру телефона
+                    private func callPhoneNumber(_ phoneNumber: String) {
+                        let formattedPhone = phoneNumber.replacingOccurrences(of: " ", with: "")
+                        if let url = URL(string: "tel://\(formattedPhone)"), UIApplication.shared.canOpenURL(url) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    
+                    // Отправка email
+                    private func sendEmail(_ email: String) {
+                        if let url = URL(string: "mailto:\(email)"), UIApplication.shared.canOpenURL(url) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    
+                    // Поделиться событием
+                    private func shareEvent() {
+                        // Создаем текст для шаринга
+                        let shareText = """
+                        Event: \(event.title)
+                        Type: \(event.type)
+                        Date: \(event.date.formatted(date: .long, time: .shortened))
+                        Location: \(event.location)
+                        """
+                        
+                        // Создаем ссылку или любой другой контент для шаринга
+                        let items: [Any] = [shareText]
+                        
+                        // Показываем стандартный UI для шаринга
+                        let activityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
+                        
+                        // Находим rootViewController для представления UI шаринга
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let rootViewController = windowScene.windows.first?.rootViewController {
+                            rootViewController.present(activityViewController, animated: true, completion: nil)
+                        }
+                    }
+                    
+                    // Удаление события
+                    func deleteEvent() {
+                        // Создаем алерт для подтверждения
+                        let alert = UIAlertController(
+                            title: "Delete Event?",
+                            message: "This action cannot be undone",
+                            preferredStyle: .alert
+                        )
+                        
+                        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+                        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
+                            // Удаляем событие из Firebase
+                            Firestore.firestore().collection("events").document(event.id).delete { error in
+                                if error == nil {
+                                    // Удаляем связанные уведомления
+                                    NotificationService.shared.cancelEventNotifications(for: event.id)
+                                    
+                                    // Закрываем окно с деталями события
+                                    presentationMode.wrappedValue.dismiss()
+                                } else {
+                                    print("❌ Delete failed: \(error!.localizedDescription)")
+                                }
+                            }
+                        })
+                        
+                        // Показываем алерт
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let rootViewController = windowScene.windows.first?.rootViewController {
+                            rootViewController.present(alert, animated: true, completion: nil)
                         }
                     }
                 }
-                
-                Section {
-                    Button(action: saveSettings) {
-                        Text("Save Settings")
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(isNotificationsAuthorized ? Color.blue : Color.gray)
-                            .cornerRadius(8)
+
+                // Добавьте в конец файла
+                struct NotificationSettingsView: View {
+                    let event: Event
+                    @Environment(\.presentationMode) var presentationMode
+                    @State private var isNotificationsAuthorized = false
+                    @State private var selectedReminderTime: ReminderTime = .oneHour
+                    @State private var enableNotification = true
+                    
+                    private let notificationService = NotificationService.shared
+                    
+                    var body: some View {
+                        NavigationView {
+                            Form {
+                                Section(header: Text("Reminder Settings")) {
+                                    Toggle("Enable Event Reminder", isOn: $enableNotification)
+                                        .disabled(!isNotificationsAuthorized)
+                                    
+                                    if enableNotification {
+                                        Picker("Remind Me", selection: $selectedReminderTime) {
+                                            ForEach(ReminderTime.allCases) { time in
+                                                Text(time.rawValue).tag(time)
+                                            }
+                                        }
+                                        .disabled(!isNotificationsAuthorized)
+                                    }
+                                }
+                                
+                                if !isNotificationsAuthorized {
+                                    Section {
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            Text("Notifications Disabled")
+                                                .font(.headline)
+                                                .foregroundColor(.red)
+                                            
+                                            Text("Please enable notifications in system settings to receive event reminders.")
+                                                .font(.caption)
+                                            
+                                            Button("Open Settings") {
+                                                if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                                                    UIApplication.shared.open(settingsURL)
+                                                }
+                                            }
+                                            .padding(.vertical, 8)
+                                        }
+                                    }
+                                }
+                                
+                                Section {
+                                    Button(action: saveSettings) {
+                                        Text("Save Settings")
+                                            .frame(maxWidth: .infinity, alignment: .center)
+                                            .foregroundColor(.white)
+                                            .padding()
+                                            .background(isNotificationsAuthorized ? Color.blue : Color.gray)
+                                            .cornerRadius(8)
+                                    }
+                                    .disabled(!isNotificationsAuthorized)
+                                }
+                            }
+                            .navigationTitle("Event Reminder")
+                            .navigationBarItems(trailing: Button("Cancel") {
+                                presentationMode.wrappedValue.dismiss()
+                            })
+                            .onAppear {
+                                // Проверяем разрешение на уведомления
+                                notificationService.checkAuthorizationStatus { authorized in
+                                    isNotificationsAuthorized = authorized
+                                }
+                                
+                                // Проверяем, есть ли уже уведомление для этого события
+                                checkExistingNotification()
+                            }
+                        }
                     }
-                    .disabled(!isNotificationsAuthorized)
-                }
-            }
-            .navigationTitle("Event Reminder")
-            .navigationBarItems(trailing: Button("Cancel") {
-                presentationMode.wrappedValue.dismiss()
-            })
-            .onAppear {
-                // Проверяем разрешение на уведомления
-                notificationService.checkAuthorizationStatus { authorized in
-                    isNotificationsAuthorized = authorized
-                }
-                
-                // Проверяем, есть ли уже уведомление для этого события
-                checkExistingNotification()
-            }
-        }
-    }
-    
-    // Проверка существующего уведомления
-    private func checkExistingNotification() {
-        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-            let matchingRequests = requests.filter { $0.identifier.starts(with: "event-\(event.id)") }
-            
-            if let existingRequest = matchingRequests.first {
-                let identifier = existingRequest.identifier
-                if let reminderType = identifier.components(separatedBy: "-").last,
-                   let reminderTime = ReminderTime.allCases.first(where: { $0.rawValue == reminderType }) {
-                    DispatchQueue.main.async {
-                        selectedReminderTime = reminderTime
-                        enableNotification = true
+                    
+                    // Проверка существующего уведомления
+                    private func checkExistingNotification() {
+                        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                            let matchingRequests = requests.filter { $0.identifier.starts(with: "event-\(event.id)") }
+                            
+                            if let existingRequest = matchingRequests.first {
+                                let identifier = existingRequest.identifier
+                                if let reminderType = identifier.components(separatedBy: "-").last,
+                                   let reminderTime = ReminderTime.allCases.first(where: { $0.rawValue == reminderType }) {
+                                    DispatchQueue.main.async {
+                                        selectedReminderTime = reminderTime
+                                        enableNotification = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Сохранение настроек уведомлений
+                    private func saveSettings() {
+                        if enableNotification {
+                            notificationService.scheduleEventNotification(for: event, reminderTime: selectedReminderTime)
+                        } else {
+                            notificationService.cancelEventNotifications(for: event.id)
+                        }
+                        
+                        presentationMode.wrappedValue.dismiss()
                     }
                 }
-            }
-        }
-    }
-    
-    // Сохранение настроек уведомлений
-    private func saveSettings() {
-        if enableNotification {
-            notificationService.scheduleEventNotification(for: event, reminderTime: selectedReminderTime)
-        } else {
-            notificationService.cancelEventNotifications(for: event.id)
-        }
-        
-        presentationMode.wrappedValue.dismiss()
-    }
-}

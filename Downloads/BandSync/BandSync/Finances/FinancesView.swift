@@ -492,12 +492,17 @@ struct FinancesView: View {
             }
             .onAppear {
                 fetchUserRole()
-                fetchFinances()
-                fetchEvents()
-                ensureCurrencyRatesAreUpdated {
-                    self.calculateTotals()
+                FirestoreService.shared.getGroupDefaultCurrency { currency, _ in
+                        if let currency = currency {
+                            self.selectedCurrency = currency
+                        }
+                        fetchFinances()
+                        fetchEvents()
+                        ensureCurrencyRatesAreUpdated {
+                            self.calculateTotals()
+                        }
+                    }
                 }
-            }
             .onChange(of: selectedTimeRange) { _ in
                 calculateTotals()
             }

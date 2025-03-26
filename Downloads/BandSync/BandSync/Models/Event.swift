@@ -31,6 +31,8 @@ struct Event: Identifiable, Codable {
     var hotel: Hotel
     var fee: String
     var setlist: [String]
+    var setlistId: String?      // ID сетлиста
+    var setlistName: String?    // Название сетлиста (кэшированное)
     var notes: String
     var schedule: [DailyScheduleItem]
     var isPersonal: Bool = false  
@@ -50,6 +52,8 @@ struct Event: Identifiable, Codable {
          hotel: Hotel,
          fee: String,
          setlist: [String] = [],
+         setlistId: String? = nil,     // Добавь этот параметр
+         setlistName: String? = nil,   // И этот
          notes: String = "",
          isPersonal: Bool = false,
          schedule: [DailyScheduleItem] = []) {
@@ -64,6 +68,8 @@ struct Event: Identifiable, Codable {
         self.hotel = hotel
         self.fee = fee
         self.setlist = setlist
+        self.setlistId = setlistId
+        self.setlistName = setlistName
         self.notes = notes
         self.schedule = schedule
         self.isPersonal = isPersonal
@@ -152,7 +158,7 @@ struct Event: Identifiable, Codable {
     }
 
     var asDictionary: [String: Any] {
-        return [
+        var dict: [String: Any] = [
             "id": id,
             "title": title,
             "date": Timestamp(date: date),
@@ -177,10 +183,21 @@ struct Event: Identifiable, Codable {
                 "checkIn": hotel.checkIn,
                 "checkOut": hotel.checkOut
             ],
-            "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] }
+            "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] },
+            "isPersonal": isPersonal
         ]
+        
+        // Теперь добавим новые поля, если они не nil
+        if let setlistId = setlistId {
+            dict["setlistId"] = setlistId
+        }
+        
+        if let setlistName = setlistName {
+            dict["setlistName"] = setlistName
+        }
+        
+        return dict
     }
-
     // Возвращает иконку в зависимости от типа события
     var icon: String {
         switch type {

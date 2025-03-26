@@ -8,6 +8,7 @@ struct EventFinancesView: View {
     @State private var isLoading = true
     @State private var showingAddTransactionSheet = false
     
+    
     var body: some View {
         VStack {
             if isLoading {

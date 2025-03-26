@@ -18,7 +18,29 @@ class FirestoreService {
     }
 
     // MARK: - Common methods
-
+    func getGroupDefaultCurrency(completion: @escaping (String?, Error?) -> Void) {
+        getCurrentUserGroup { groupId, _, error in
+            if let error = error {
+                completion(nil, error)
+                return
+            }
+            
+            guard let groupId = groupId else {
+                completion("EUR", nil) // Значение по умолчанию, если нет группы
+                return
+            }
+            
+            self.db.collection("groups").document(groupId).getDocument { document, error in
+                if let error = error {
+                    completion(nil, error)
+                    return
+                }
+                
+                let currency = document?.data()?["defaultCurrency"] as? String ?? "USD"
+                completion(currency, nil)
+            }
+        }
+    }
     // Get current user ID
     func currentUserId() -> String? {
         return Auth.auth().currentUser?.uid

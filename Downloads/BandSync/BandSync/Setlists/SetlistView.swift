@@ -272,8 +272,24 @@ struct SetlistView: View {
     }
 
     func deleteSetlist(at offsets: IndexSet) {
+        // Создаем копию сетлистов для удаления
+        let setlistsToDelete = offsets.map { setlists[$0] }
+        
+        // Удаляем из локального массива
         setlists.remove(atOffsets: offsets)
 
+        // Удаляем из Firebase
+        let db = Firestore.firestore()
+        setlistsToDelete.forEach { setlist in
+            db.collection("setlists").document(setlist.id).delete { error in
+                if let error = error {
+                    print("❌ Ошибка при удалении сетлиста: \(error.localizedDescription)")
+                    // Возможно, стоит показать пользователю сообщение об ошибке
+                }
+            }
+        }
+
+        // Обновляем выбранный сетлист
         if let firstSetlist = setlists.first {
             selectedSetlist = firstSetlist
             calculateTotalDuration()
