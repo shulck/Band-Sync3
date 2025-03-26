@@ -14,7 +14,7 @@ struct MerchandiseInventoryView: View {
     // All available merchandise categories
     let categories = ["Clothing", "Accessories", "Music", "Other"]
     // Available currencies
-    let currencies = ["USD", "EUR", "GBP", "JPY", "RUB"]
+    let currencies = ["USD", "EUR", "UAH"]
 
     var filteredItems: [MerchandiseItem] {
         var result = items

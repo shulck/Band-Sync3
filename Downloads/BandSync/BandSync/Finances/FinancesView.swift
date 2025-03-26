@@ -4,6 +4,7 @@ import FirebaseFirestore
 import FirebaseStorage
 
 struct FinancesView: View {
+    @State private var isLoading = true
     @State private var showingMerchandiseSale = false
     @State private var selectedCategory: String?
     @State private var selectedEvent: Event? = nil
@@ -18,7 +19,7 @@ struct FinancesView: View {
     @State private var totalExpenses: Double = 0
     @State private var selectedTimeRange: TimeRange = .month
     @State private var searchText = ""
-
+    
     func fetchEvents() {
         let db = Firestore.firestore()
         db.collection("events").getDocuments { snapshot, error in
@@ -292,10 +293,77 @@ struct FinancesView: View {
                                                     Label("Delete", systemImage: "trash")
                                                 }
                                             }
+                                        // Внутри VStack в блоке "else" (где отображаются транзакции)
+                                        VStack(spacing: 0) {
+                                            // Существующий код с ForEach...
+                                            ForEach(filteredFinances.indices, id: \.self) { index in
+                                                let record = filteredFinances[index]
+                                                
+                                                FinanceRecordRow(record: record)
+                                                    .padding(.horizontal)
+                                                    .padding(.vertical, 8)
+                                                    .background(Color(.systemBackground))
+                                                    .contentShape(Rectangle())
+                                                    .onTapGesture {
+                                                        selectedRecord = record
+                                                        showingEditTransaction = true
+                                                    }
+                                                    .contextMenu {
+                                                        Button(role: .destructive) {
+                                                            if let arrayIndex = finances.firstIndex(where: { $0.id == record.id }) {
+                                                                finances.remove(at: arrayIndex)
+                                                                // Удаление из Firebase делается при вызове onDelete
+                                                                let db = Firestore.firestore()
+                                                                db.collection("finances").document(record.id).delete()
+                                                                calculateTotals()
+                                                            }
+                                                        } label: {
+                                                            Label("Delete", systemImage: "trash")
+                                                        }
+                                                    }
+                                                
+                                                if index < filteredFinances.count - 1 {
+                                                    Divider()
+                                                        .padding(.leading)
+                                                }
+                                            }
+                                            
+                                            if !filteredFinances.isEmpty && filteredFinances.count >= 20 {
+                                                Button(action: {
+                                                    if let lastRecord = filteredFinances.last {
+                                                        loadMoreFinances(after: lastRecord)
+                                                    }
+                                                }) {
+                                                    HStack {
+                                                        Text("Load More")
+                                                        Image(systemName: "arrow.down.circle")
+                                                    }
+                                                    .foregroundColor(.blue)
+                                                    .padding()
+                                                    .frame(maxWidth: .infinity)
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
+                                            }
+                                        }
+                                        .background(Color(.secondarySystemBackground))
+                                        .cornerRadius(12)
+                                        .padding(.horizontal)
 
                                         if index < filteredFinances.count - 1 {
                                             Divider()
                                                 .padding(.leading)
+                                        }
+                                    }
+
+                                    if !filteredFinances.isEmpty && filteredFinances.count >= 20 {
+                                        Button(action: {
+                                            if let lastRecord = filteredFinances.last {
+                                                loadMoreFinances(after: lastRecord)
+                                            }
+                                        }) {
+                                            Text("Load More")
+                                                .foregroundColor(.blue)
+                                                .padding()
                                         }
                                     }
                                 }
@@ -524,12 +592,12 @@ struct FinancesView: View {
 
     // Helper function for currency conversion
     func convertAmountIfNeeded(amount: Double, fromCurrency: String, toCurrency: String) -> Double {
-        // If currencies match, no conversion needed
+        // Если валюты совпадают, конвертировать не нужно
         if fromCurrency == toCurrency {
             return amount
         }
-
-        // Try to convert using the service
+        
+        // Пробуем конвертировать с помощью сервиса
         if let convertedAmount = CurrencyConverterService.shared.convert(
             amount: amount,
             from: fromCurrency,
@@ -537,7 +605,8 @@ struct FinancesView: View {
         ) {
             return convertedAmount
         } else {
-            // Fallback to approximate conversion if service fails
+            // Если сервис не смог конвертировать, используем примерные курсы
+            print("Warning: Using approximate exchange rates for \(fromCurrency) to \(toCurrency)")
             return amount * getApproximateRate(from: fromCurrency, to: toCurrency)
         }
     }
@@ -547,10 +616,9 @@ struct FinancesView: View {
         // Add basic rates for most common currencies
         // This is a fallback if API is unavailable
         let approximateRates: [String: [String: Double]] = [
-            "USD": ["EUR": 0.92, "UAH": 38.0, "GBP": 0.8],
-            "EUR": ["USD": 1.09, "UAH": 41.0, "GBP": 0.87],
-            "UAH": ["USD": 0.026, "EUR": 0.024, "GBP": 0.021],
-            "GBP": ["USD": 1.25, "EUR": 1.15, "UAH": 47.0]
+            "USD": ["EUR": 0.92, "UAH": 38.0],
+            "EUR": ["USD": 1.09, "UAH": 41.0],
+            "UAH": ["USD": 0.026, "EUR": 0.024]
         ]
 
         return approximateRates[sourceCurrency]?[targetCurrency] ?? 1.0
@@ -560,10 +628,16 @@ struct FinancesView: View {
     private func updateCurrencyRates() {
         // Get all unique currencies used in records
         let uniqueCurrencies = Set(finances.map { $0.currency })
-
+        
+        print("Updating exchange rates for currencies: \(uniqueCurrencies)")
+        
         // Update rates for each currency
         for currency in uniqueCurrencies {
-            CurrencyConverterService.shared.updateExchangeRates(for: currency)
+            CurrencyConverterService.shared.updateExchangeRates(for: currency) { success in
+                if !success {
+                    print("Warning: Failed to update exchange rate for \(currency)")
+                }
+            }
         }
     }
 
@@ -650,111 +724,136 @@ struct FinancesView: View {
         }
     }
 
-    func fetchFinances() {
+    func fetchFinances(limit: Int = 20) {
         // Reset current data
         finances = []
+        isLoading = true
 
         guard let user = Auth.auth().currentUser else {
-            print("CRITICAL: User not authorized")
+            print("User not authorized")
+            isLoading = false
             return
         }
 
-        print("Loading finances for user: \(user.uid)")
-
         let db = Firestore.firestore()
-
-        // Get all finance records
-        db.collection("finances").getDocuments { snapshot, error in
+        
+        // Get initial batch of finance records
+        db.collection("finances")
+          .whereField("userId", isEqualTo: user.uid)
+          .order(by: "date", descending: true)
+          .limit(to: limit)
+          .getDocuments { snapshot, error in
+            self.isLoading = false
+            
             if let error = error {
-                print("ERROR: \(error.localizedDescription)")
+                print("Error fetching finances: \(error.localizedDescription)")
                 return
             }
+            
+            self.processFinanceDocuments(snapshot?.documents ?? [])
+            
+            // Calculate totals after data is loaded
+            self.calculateTotals()
+        }
+    }
 
-            guard let documents = snapshot?.documents else {
-                print("INFO: No documents found")
+    // New helper method to process documents
+    private func processFinanceDocuments(_ documents: [QueryDocumentSnapshot]) {
+        var tempRecords: [FinanceRecord] = []
+        
+        for document in documents {
+            let data = document.data()
+            
+            // Extract required fields with proper type checking
+            guard let typeString = data["type"] as? String,
+                  let amount = data["amount"] as? Double,
+                  let description = data["description"] as? String,
+                  let category = data["category"] as? String else {
+                print("Document missing required fields: \(document.documentID)")
+                continue
+            }
+            
+            // Currency (with default value)
+            let currency = data["currency"] as? String ?? "USD"
+            
+            // Date (with default value)
+            let date: Date
+            if let timestamp = data["date"] as? Timestamp {
+                date = timestamp.dateValue()
+            } else {
+                date = Date()
+            }
+            
+            // Transaction type
+            let type: FinanceType = typeString == "income" ? .income : .expense
+            
+            // Optional fields
+            let receiptImageURL = data["receiptImageURL"] as? String
+            let eventId = data["eventId"] as? String
+            let eventTitle = data["eventTitle"] as? String
+            let subcategory = data["subcategory"] as? String
+            let tags = data["tags"] as? [String]
+            
+            // Create record
+            let record = FinanceRecord(
+                id: document.documentID,
+                type: type,
+                amount: amount,
+                currency: currency,
+                description: description,
+                category: category,
+                date: date,
+                receiptImageURL: receiptImageURL,
+                eventId: eventId,
+                eventTitle: eventTitle,
+                subcategory: subcategory,
+                tags: tags
+            )
+            
+            tempRecords.append(record)
+        }
+        
+        // Update UI on main thread
+        DispatchQueue.main.async {
+            self.finances = tempRecords
+        }
+    }
+
+    // Add a method to load more data
+    func loadMoreFinances(after lastRecord: FinanceRecord, limit: Int = 20) {
+        guard let user = Auth.auth().currentUser else { return }
+        
+        let db = Firestore.firestore()
+        
+        db.collection("finances")
+          .whereField("userId", isEqualTo: user.uid)
+          .order(by: "date", descending: true)
+          .start(after: [Timestamp(date: lastRecord.date)])
+          .limit(to: limit)
+          .getDocuments { snapshot, error in
+            if let error = error {
+                print("Error loading more finances: \(error.localizedDescription)")
                 return
             }
-
-            print("INFO: Retrieved \(documents.count) documents")
-
-            var tempRecords: [FinanceRecord] = []
-
-            for document in documents {
-                let data = document.data()
-                print("PROCESSING: Document \(document.documentID)")
-
-                // Check userId
-                if let docUserId = data["userId"] as? String {
-                    print("DOCUMENT user: \(docUserId)")
-                    print("CURRENT user: \(user.uid)")
-                    if docUserId != user.uid {
-                        print("SKIP: Document belongs to another user")
-                        continue
-                    }
-                } else {
-                    print("SKIP: Document without userId")
-                    continue
-                }
-
-                // Try to load all required fields
-                guard let typeString = data["type"] as? String,
-                      let amount = data["amount"] as? Double,
-                      let description = data["description"] as? String,
-                      let category = data["category"] as? String else {
-                    print("SKIP: Document missing required fields")
-                    continue
-                }
-
-                // Currency (with default value)
-                let currency = data["currency"] as? String ?? "USD"
-
-                // Date (with default value)
-                let date: Date
-                if let timestamp = data["date"] as? Timestamp {
-                    date = timestamp.dateValue()
-                } else {
-                    date = Date()
-                }
-
-                // Transaction type
-                let type: FinanceType = typeString == "income" ? .income : .expense
-
-                // Optional fields
-                let receiptImageURL = data["receiptImageURL"] as? String
-                let eventId = data["eventId"] as? String
-                let eventTitle = data["eventTitle"] as? String
-                let subcategory = data["subcategory"] as? String
-                let tags = data["tags"] as? [String]
-
-                print("EVENT INFO: id=\(eventId ?? "none"), title=\(eventTitle ?? "none")")
-
-                // Create record
-                let record = FinanceRecord(
-                    id: document.documentID,
-                    type: type,
-                    amount: amount,
-                    currency: currency,
-                    description: description,
-                    category: category,
-                    date: date,
-                    receiptImageURL: receiptImageURL,
-                    eventId: eventId,
-                    eventTitle: eventTitle,
-                    subcategory: subcategory,
-                    tags: tags
-                )
-
-                tempRecords.append(record)
-                print("ADDED: Record \(record.id) with description '\(record.description)'")
-            }
-
-            // Sort and update UI
+            
+            let newRecords = self.processFinanceDocumentsAndReturn(snapshot?.documents ?? [])
+            
+            // Update UI on main thread
             DispatchQueue.main.async {
-                self.finances = tempRecords.sorted(by: { $0.date > $1.date })
-                print("TOTAL: Loaded \(self.finances.count) finance records")
+                self.finances.append(contentsOf: newRecords)
                 self.calculateTotals()
             }
         }
+    }
+
+    // Helper to process documents and return records without updating state
+    private func processFinanceDocumentsAndReturn(_ documents: [QueryDocumentSnapshot]) -> [FinanceRecord] {
+        var records: [FinanceRecord] = []
+        
+        // [Тот же код обработки документов, что и в processFinanceDocuments, но с возвратом массива]
+        // ...
+        
+        return records
     }
 
     func saveFinanceRecord(_ record: FinanceRecord) {
@@ -993,7 +1092,9 @@ struct FinanceChartView: View {
     // Helper for scaling bar heights
     func scaledHeight(_ value: Double) -> CGFloat {
         let maxValue = chartData.flatMap { [$0.income, $0.expense] }.max() ?? 1
-        let scale = 150.0 / maxValue
+        // Проверяем, чтобы maxValue не был 0 или очень близким к 0
+        let safeMaxValue = max(maxValue, 0.0001) // Используем минимальное значение для защиты от деления на 0
+        let scale = 150.0 / safeMaxValue
         return CGFloat(value * scale)
     }
 

@@ -11,13 +11,13 @@ class ImageUploadService {
         var localizedDescription: String {
             switch self {
             case .imageCompressionFailed:
-                return "Не удалось сжать изображение"
+                return "Failed to compress image"
             case .uploadFailed(let error):
-                return "Ошибка загрузки: \(error.localizedDescription)"
+                return "Upload error: \(error.localizedDescription)"
             case .urlRetrievalFailed:
-                return "Не удалось получить URL загруженного изображения"
+                return "Failed to retrieve URL of uploaded image"
             case .unknown:
-                return "Неизвестная ошибка при загрузке изображения"
+                return "Unknown error during image upload"
             }
         }
     }

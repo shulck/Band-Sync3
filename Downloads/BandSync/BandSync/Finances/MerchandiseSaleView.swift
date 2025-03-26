@@ -17,7 +17,7 @@ struct MerchandiseSaleView: View {
     @State private var currency = "USD"
 
     let paymentMethods = ["Cash", "Card", "Online", "Other"]
-    let currencies = ["USD", "EUR", "UAH", "GBP"]
+    let currencies = ["USD", "EUR", "UAH"]
 
     var onSaleComplete: (FinanceRecord) -> Void
 

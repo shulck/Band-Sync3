@@ -27,6 +27,7 @@ struct AddEventView: View {
     @State private var setlist: [String] = []
     @State private var schedule: [DailyScheduleItem] = []
     @State private var showingSetlistPicker = false
+    @State private var isPersonalEvent = false
 
     // Шаблоны для автоматического заполнения
     let eventTemplates: [String: [String: Any]] = [
@@ -125,6 +126,8 @@ struct AddEventView: View {
                     Picker("Event type", selection: $type) {
                         ForEach(eventTypes, id: \.self) { Text($0) }
                     }
+                    Section {Toggle("Личное событие", isOn: $isPersonalEvent)
+                    }
                     .onChange(of: type) { newType in
                         // Автоматическое заполнение расписания в зависимости от типа события
                         if let template = eventTemplates[newType],
@@ -136,7 +139,6 @@ struct AddEventView: View {
                     Picker("Status", selection: $status) {
                         ForEach(statusOptions, id: \.self) { Text($0) }
                     }
-
                     HStack {
                         TextField("Location", text: $location)
                         Button(action: {
@@ -271,7 +273,7 @@ struct AddEventView: View {
     }
 
     func saveEvent() {
-        let db = Firestore.firestore()
+            let db = Firestore.firestore()
         let event = Event(
             id: UUID().uuidString,
             title: title,
@@ -285,23 +287,51 @@ struct AddEventView: View {
             fee: fee,
             setlist: setlist,
             notes: notes,
+            isPersonal: isPersonalEvent,  // Добавьте эту строку
             schedule: schedule
         )
+        
 
-        db.collection("events").document(event.id).setData(event.asDictionary) { error in
-            if let error = error {
-                print("❌ Error saving event: \(error.localizedDescription)")
-            } else {
-                // Сохраняем контакты организатора и координатора в Firebase
-                saveContact(organizer, role: "Organizer")
-                saveContact(coordinator, role: "Coordinator")
+        db.collection("events").document(event.id).setData([
+                    "id": event.id,
+                    "title": title,
+                    "date": Timestamp(date: date),
+                    "type": type,
+                    "status": status,
+                    "location": location,
+                    "fee": fee,
+                    "notes": notes,
+                    "setlist": setlist,
+                    "isPersonal": isPersonalEvent,  // И ЗДЕСЬ
+                    "organizer": [
+                        "name": organizer.name,
+                        "phone": organizer.phone,
+                        "email": organizer.email
+                    ],
+                    "coordinator": [
+                        "name": coordinator.name,
+                        "phone": coordinator.phone,
+                        "email": coordinator.email
+                    ],
+                    "hotel": [
+                        "address": hotel.address,
+                        "checkIn": hotel.checkIn,
+                        "checkOut": hotel.checkOut
+                    ],
+                    "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] }
+                ]) { error in
+                    if let error = error {
+                        print("❌ Error saving event: \(error.localizedDescription)")
+                    } else {
+                        saveContact(organizer, role: "Organizer")
+                        saveContact(coordinator, role: "Coordinator")
 
-                onSave(event)
-                presentationMode.wrappedValue.dismiss()
+                        onSave(event)
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
             }
         }
-    }
-
     // Функция для сохранения контактов в Firebase
     func saveContact(_ contact: EventContact, role: String) {
         // Проверяем, что хотя бы имя указано
@@ -309,17 +339,23 @@ struct AddEventView: View {
             return // Пропускаем пустые контакты
         }
 
-        let db = Firestore.firestore()
-        let contactData: [String: Any] = [
-            "name": contact.name,
-            "phone": contact.phone,
-            "email": contact.email,
-            "role": role,
-            "venue": location,
-            "rating": 0,
-            "notes": "",
-            "createdAt": FieldValue.serverTimestamp()
-        ]
+        func saveContact(_ contact: EventContact, role: String, venue: String) {
+            // Проверяем, что хотя бы имя указано
+            if contact.name.isEmpty {
+                return // Пропускаем пустые контакты
+            }
+
+            let db = Firestore.firestore()
+            let contactData: [String: Any] = [
+                "name": contact.name,
+                "phone": contact.phone,
+                "email": contact.email,
+                "role": role,
+                "venue": venue,
+                "rating": 0,
+                "notes": "",
+                "createdAt": FieldValue.serverTimestamp()
+            ]
 
         // Проверяем наличие контакта по имени (вместо телефона, который может быть пустым)
         db.collection("contacts")
@@ -357,4 +393,5 @@ struct AddEventView: View {
                 }
             }
     }
-}
+
+        }

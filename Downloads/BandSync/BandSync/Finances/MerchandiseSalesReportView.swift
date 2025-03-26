@@ -11,7 +11,7 @@ struct MerchandiseSalesReportView: View {
     @State private var endDate = Date().endOfMonth()
     @State private var selectedCurrency = "USD" // Добавляем валюту
 
-    let currencies = ["USD", "EUR", "UAH", "GBP"] // Список валют
+    let currencies = ["USD", "EUR", "UAH"] // Список валют
 
     var dateFormatter: DateFormatter {
         let formatter = DateFormatter()

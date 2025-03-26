@@ -23,7 +23,7 @@ class FinanceValidator {
         guard currency.count == 3 else { return false }
         
         // Список поддерживаемых валют (можно расширить)
-        let supportedCurrencies = ["USD", "EUR", "UAH", "GBP"]
+        let supportedCurrencies = ["USD", "EUR", "UAH"]
         
         return supportedCurrencies.contains(currency)
     }

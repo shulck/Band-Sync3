@@ -33,6 +33,7 @@ struct Event: Identifiable, Codable {
     var setlist: [String]
     var notes: String
     var schedule: [DailyScheduleItem]
+    var isPersonal: Bool = false  
 
     enum CodingKeys: String, CodingKey {
         case id, title, date, type, status, location, organizer, coordinator, hotel, fee, setlist, notes, schedule
@@ -50,6 +51,7 @@ struct Event: Identifiable, Codable {
          fee: String,
          setlist: [String] = [],
          notes: String = "",
+         isPersonal: Bool = false,
          schedule: [DailyScheduleItem] = []) {
         self.id = id
         self.title = title
@@ -64,6 +66,7 @@ struct Event: Identifiable, Codable {
         self.setlist = setlist
         self.notes = notes
         self.schedule = schedule
+        self.isPersonal = isPersonal
     }
 
     init(from decoder: Decoder) throws {

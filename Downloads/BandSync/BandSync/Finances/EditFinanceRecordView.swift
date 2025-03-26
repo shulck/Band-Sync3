@@ -30,7 +30,7 @@ struct EditFinanceRecordView: View {
     let incomeCategories = ["Gig", "Merchandise", "Royalties", "Sponsorship", "Other"]
     let expenseCategories = ["Logistics", "Accommodation", "Food", "Equipment", "Promotion", "Fees", "Other"]
     let merchandiseSubcategories = ["T-Shirts", "Hoodies", "Hats", "Pins/Stickers", "CDs/Vinyl", "Posters", "Other"]
-    let currencies = ["USD", "EUR", "UAH", "GBP"]
+    let currencies = ["USD", "EUR", "UAH"]
     
     // Инициализатор для установки начальных значений
     init(record: FinanceRecord, onSave: @escaping (FinanceRecord) -> Void) {
