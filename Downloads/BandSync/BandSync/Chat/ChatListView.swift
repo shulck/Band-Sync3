@@ -8,7 +8,6 @@ struct ChatListView: View {
     @State private var unreadCounts: [String: Int] = [:]
     @State private var showDeleteAlert = false
     @State private var chatToDelete: ChatRoom?
-    @State private var showEditChat = false
     @State private var chatToEdit: ChatRoom?
     @State private var editChatName = ""
 
@@ -108,7 +107,6 @@ struct ChatListView: View {
                                         Button(action: {
                                             chatToEdit = chatRoom
                                             editChatName = chatRoom.name
-                                            showEditChat = true
                                         }) {
                                             Label("Редактировать", systemImage: "pencil")
                                         }
@@ -134,7 +132,6 @@ struct ChatListView: View {
                                     Button {
                                         chatToEdit = chatRoom
                                         editChatName = chatRoom.name
-                                        showEditChat = true
                                     } label: {
                                         Label("Изменить", systemImage: "pencil")
                                     }
@@ -174,24 +171,19 @@ struct ChatListView: View {
             } message: {
                 Text("Вы уверены, что хотите удалить чат? Это действие невозможно отменить.")
             }
-            .sheet(isPresented: $showEditChat) {
-                if let chatRoom = chatToEdit {
-                    EditChatView(
-                        chatService: chatService,
-                        chatId: chatRoom.id,
-                        chatName: $editChatName,
-                        onSave: { success in
-                            if success {
-                                // Подождем немного и обновим список
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    chatService.fetchChatRooms()
-                                }
+            .sheet(item: $chatToEdit) { chatRoom in
+                EditChatView(
+                    chatId: chatRoom.id,
+                    chatName: $editChatName,
+                    onSave: { success in
+                        if success {
+                            // Обновляем список чатов
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                chatService.fetchChatRooms()
                             }
-                            // Очищаем ссылку на редактируемый чат
-                            chatToEdit = nil
                         }
-                    )
-                }
+                    }
+                )
             }
             .onAppear {
                 chatService.fetchChatRooms()
