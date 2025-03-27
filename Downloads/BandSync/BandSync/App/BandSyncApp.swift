@@ -55,7 +55,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         FirebaseApp.configure()
         print("🔥 Firebase successfully initialized!")
         Firestore.firestore() // Initialize Firestore
-        Storage.storage() // Initialize Firebase Storage
 
         // Configure notification center
         UNUserNotificationCenter.current().delegate = self
