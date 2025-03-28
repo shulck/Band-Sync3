@@ -183,12 +183,10 @@ struct ChatListView: View {
             })
 
             .sheet(isPresented: $showingNewChatView) {
-                // Исправленный вызов - создаем новый пустой ChatRoom
-                ChatView(chatRoom: ChatRoom(
-                    name: "Новый чат",
-                    participants: [Auth.auth().currentUser?.uid].compactMap { $0 },
-                    isGroupChat: false
-                ))
+                // Используем NewChatView вместо ChatView для создания нового чата
+                NewChatView(chatService: chatService, onDismiss: {
+                    showingNewChatView = false
+                })
             }
             .alert("Удалить чат?", isPresented: $showDeleteAlert) {
                 Button("Отмена", role: .cancel) {}
