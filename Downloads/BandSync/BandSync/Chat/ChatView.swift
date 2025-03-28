@@ -20,163 +20,221 @@ struct ChatView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Сообщения
+            VStack(spacing: 0) {
+                messagesScrollView
+                
+                if isCurrentUserInChat {
+                    messageInputArea
+                } else {
+                    nonParticipantMessage
+                }
+            }
+            .navigationTitle(chatRoom.name)
+            .toolbar {
+                toolbarItems
+            }
+            .sheet(isPresented: $showingParticipants) {
+                ParticipantsView(participants: chatRoom.participants)
+            }
+            .onAppear {
+                chatService.fetchMessages(for: chatRoom.id)
+            }
+            .onDisappear {
+                chatService.stopListening()
+            }
+        }
+        
+        // Отдельные компоненты представления
+        private var messagesScrollView: some View {
             ScrollViewReader { scrollView in
                 ScrollView {
-                    // Кнопка загрузки предыдущих сообщений
-                    if chatService.hasMoreMessages {
-                        Button(action: {
-                            chatService.loadMoreMessages(for: chatRoom.id)
-                        }) {
-                            if chatService.isLoading {
-                                ProgressView()
-                                    .padding()
-                            } else {
-                                Text("Load Previous Messages")
-                                    .foregroundColor(.blue)
-                                    .padding()
-                            }
-                        }
-                        .disabled(chatService.isLoading)
+                    VStack(spacing: 0) {
+                        loadPreviousMessagesButton
+                        
+                        messagesContent
                     }
-
-                    // Список сообщений
-                    LazyVStack(spacing: 12) {
-                        ForEach(chatService.messages) { message in
-                            MessageBubble(
-                                message: message,
-                                isFromCurrentUser: message.senderId == chatService.currentUserId,
-                                onEdit: {
-                                    if message.senderId == chatService.currentUserId {
-                                        editingMessage = message
-                                        messageText = message.text
-                                    }
-                                },
-                                onDelete: {
-                                    if message.senderId == chatService.currentUserId {
-                                        deleteMessage(message)
-                                    }
-                                }
-                            )
-                            .id(message.id)
-                            .onTapGesture {
-                                // Повторная отправка при ошибке
-                                if message.status == .failed && message.senderId == chatService.currentUserId {
-                                    resendMessage(message)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 10)
                 }
                 .onChange(of: chatService.messages.count) { _ in
-                    if scrollToBottom, let lastMessage = chatService.messages.last {
-                        withAnimation {
-                            scrollView.scrollTo(lastMessage.id, anchor: .bottom)
-                        }
-                    }
+                    scrollToNewMessageIfNeeded(scrollView: scrollView)
                 }
                 .background(Color(.systemGroupedBackground))
             }
-
-            // Форма отправки сообщения
-            if isCurrentUserInChat {
-                VStack(spacing: 0) {
-                    Divider()
-
-                    // Контейнер ввода сообщения
-                    HStack(spacing: 8) {
-                        // Кнопка эмодзи
-                        Button(action: {
-                            showEmojiPicker.toggle()
-                            // Скрыть клавиатуру при открытии эмодзи
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        }) {
-                            Image(systemName: "face.smiling")
-                                .foregroundColor(showEmojiPicker ? .blue : .gray)
+        }
+        
+        private var loadPreviousMessagesButton: some View {
+            Group {
+                if chatService.hasMoreMessages {
+                    Button(action: {
+                        chatService.loadMoreMessages(for: chatRoom.id)
+                    }) {
+                        if chatService.isLoading {
+                            ProgressView()
+                                .padding()
+                        } else {
+                            Text("Load Previous Messages")
+                                .foregroundColor(.blue)
+                                .padding()
                         }
-                        .padding(.leading, 4)
-
-                        // Текстовое поле с правильным связыванием высоты
-                        AutoGrowingTextField(
-                            text: $messageText,
-                            minHeight: 32,
-                            maxHeight: 120,
-                            height: $textFieldHeight
-                        )
-                        .frame(height: textFieldHeight)
-                        .background(
-                            editingMessage != nil ? Color.blue.opacity(0.1) : Color(.systemGray6)
-                        )
-                        .cornerRadius(18)
-                        .animation(.easeOut(duration: 0.1), value: textFieldHeight)
-
-                        // Кнопка отправки/редактирования
-                        Button(action: sendMessage) {
-                            Image(systemName: editingMessage != nil
-                                ? "checkmark.circle.fill"
-                                : "paperplane.fill")
-                                .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? .gray
-                                    : .blue)
-                        }
-                        .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .padding(6)
-
-                    // Панель эмодзи
-                    if showEmojiPicker {
-                        EmojiPickerView(onEmojiSelected: { emoji in
-                            messageText += emoji
-                        })
-                        .frame(height: 250)
-                        .transition(.move(edge: .bottom))
-                    }
+                    .disabled(chatService.isLoading)
                 }
-                .background(Color(.systemBackground))
-            } else {
-                // Сообщение для неучастников чата
-                VStack {
-                    Text("You are not a participant of this chat")
-                        .foregroundColor(.gray)
-                        .padding()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemBackground))
             }
         }
-        .navigationTitle(chatRoom.name)
-        .toolbar {
-            // Кнопка участников для группового чата
-            if chatRoom.isGroupChat {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingParticipants = true }) {
-                        Image(systemName: "person.3")
-                    }
-                }
+        
+    private var messagesContent: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(chatService.messages) { message in
+                messageBubbleView(for: message)
             }
-            
-            // Убираем кнопку автоскролла со стрелкой
-            // ToolbarItem(placement: .navigationBarTrailing) {
-            //     Button(action: { scrollToBottom.toggle() }) {
-            //         Image(systemName: scrollToBottom
-            //             ? "arrow.down.to.line.compact"
-            //             : "arrow.up.to.line.compact")
-            //     }
-            // }
         }
-        .sheet(isPresented: $showingParticipants) {
-            ParticipantsView(participants: chatRoom.participants)
-        }
-        .onAppear {
-            chatService.fetchMessages(for: chatRoom.id)
-        }
-        .onDisappear {
-            chatService.stopListening()
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+    }
+
+    private func messageBubbleView(for message: ChatMessage) -> some View {
+        MessageBubble(
+            message: message,
+            isFromCurrentUser: message.senderId == chatService.currentUserId,
+            onEdit: {
+                handleEditMessage(message)
+            },
+            onDelete: {
+                handleDeleteMessage(message)
+            },
+            onReply: {
+                // Добавьте обработчик для ответа если необходимо
+            },
+            onTapReply: { messageId in
+                // Обработчик нажатия на сообщение с ответом
+            }
+        )
+        .id(message.id)
+        .onTapGesture {
+            handleMessageTap(message)
         }
     }
+
+    private func handleEditMessage(_ message: ChatMessage) {
+        if message.senderId == chatService.currentUserId {
+            editingMessage = message
+            messageText = message.text
+        }
+    }
+
+    private func handleDeleteMessage(_ message: ChatMessage) {
+        if message.senderId == chatService.currentUserId {
+            deleteMessage(message)
+        }
+    }
+
+    private func handleMessageTap(_ message: ChatMessage) {
+        // Повторная отправка при ошибке
+        if message.status == .failed && message.senderId == chatService.currentUserId {
+            resendMessage(message)
+        }
+    }
+        private var messageInputArea: some View {
+            VStack(spacing: 0) {
+                Divider()
+                
+                HStack(spacing: 8) {
+                    emojiButton
+                    messageTextField
+                    sendButton
+                }
+                .padding(6)
+                
+                emojiPickerView
+            }
+            .background(Color(.systemBackground))
+        }
+        
+        private var emojiButton: some View {
+            Button(action: {
+                showEmojiPicker.toggle()
+                // Скрыть клавиатуру при открытии эмодзи
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }) {
+                Image(systemName: "face.smiling")
+                    .foregroundColor(showEmojiPicker ? .blue : .gray)
+            }
+            .padding(.leading, 4)
+        }
+        
+        private var messageTextField: some View {
+            AutoGrowingTextField(
+                text: $messageText,
+                minHeight: 32,
+                maxHeight: 120,
+                height: $textFieldHeight
+            )
+            .frame(height: textFieldHeight)
+            .background(
+                editingMessage != nil ? Color.blue.opacity(0.1) : Color(.systemGray6)
+            )
+            .cornerRadius(18)
+            .animation(.easeOut(duration: 0.1), value: textFieldHeight)
+        }
+        
+        private var sendButton: some View {
+            Button(action: sendMessage) {
+                Image(systemName: editingMessage != nil
+                    ? "checkmark.circle.fill"
+                    : "paperplane.fill")
+                    .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? .gray
+                        : .blue)
+            }
+            .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        
+        private var emojiPickerView: some View {
+            Group {
+                if showEmojiPicker {
+                    EmojiPickerView(onEmojiSelected: { emoji in
+                        messageText += emoji
+                    })
+                    .frame(height: 250)
+                    .transition(.move(edge: .bottom))
+                }
+            }
+        }
+        
+        private var nonParticipantMessage: some View {
+            VStack {
+                Text("You are not a participant of this chat")
+                    .foregroundColor(.gray)
+                    .padding()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemBackground))
+        }
+        
+        private var toolbarItems: some ToolbarContent {
+            Group {
+                if chatRoom.isGroupChat {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { showingParticipants = true }) {
+                            Image(systemName: "person.3")
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Вспомогательные методы
+        private func scrollToNewMessageIfNeeded(scrollView: ScrollViewProxy) {
+            if scrollToBottom, let lastMessage = chatService.messages.last {
+                withAnimation {
+                    scrollView.scrollTo(lastMessage.id, anchor: .bottom)
+                }
+            }
+        }
+        
+        private func resendMessage(_ message: ChatMessage) {
+            guard message.status == .failed else { return }
+            chatService.resendMessage(message, in: chatRoom.id)
+        }
 
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
