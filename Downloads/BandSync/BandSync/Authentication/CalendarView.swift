@@ -142,45 +142,57 @@ struct CalendarView: View {
 
     // Получение данных о событиях из Firebase
     func fetchEvents() {
-        // Сначала получаем ID группы текущего пользователя
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
-            print("Пользователь не авторизован")
-            return
-        }
+        guard let userId = Auth.auth().currentUser?.uid else { return }
         
         let db = Firestore.firestore()
-        
-        // Получаем groupId текущего пользователя
-        db.collection("users").document(currentUserId).getDocument { userDoc, userError in
-            if let userError = userError {
-                print("Ошибка при получении данных пользователя: \(userError.localizedDescription)")
-                return
-            }
+        db.collection("users").document(userId).getDocument { (document, error) in
+            guard let document = document, document.exists,
+                  let data = document.data(),
+                  let groupId = data["groupId"] as? String else { return }
             
-            guard let userData = userDoc?.data(),
-                  let groupId = userData["groupId"] as? String else {
-                print("Не удалось получить ID группы пользователя")
-                return
-            }
+            print("Загрузка событий для группы: \(groupId)")
             
-            // Теперь получаем только события для этой группы
             db.collection("events")
               .whereField("groupId", isEqualTo: groupId)
               .getDocuments { snapshot, error in
-                if let error = error {
-                    print("Ошибка при получении событий: \(error.localizedDescription)")
-                    return
-                }
-                
                 if let snapshot = snapshot {
-                    self.events = snapshot.documents.compactMap { doc in
+                    // Загружаем базовые события
+                    let baseEvents = snapshot.documents.compactMap { doc in
                         Event(from: doc.data(), id: doc.documentID)
                     }
+                    
+                    // Обрабатываем повторяющиеся события
+                    var allEvents = [Event]()
+                    let calendar = Calendar.current
+                    let startDate = calendar.date(byAdding: .month, value: -3, to: Date()) ?? Date()
+                    let endDate = calendar.date(byAdding: .month, value: 6, to: Date()) ?? Date()
+                    
+                    for event in baseEvents {
+                        if event.isRecurring, let recurrenceType = event.recurrenceType {
+                            // Получаем все даты для повторяющегося события
+                            let dates = RecurrenceHelper.getRecurringEventDates(
+                                event: event,
+                                startDate: startDate,
+                                endDate: endDate
+                            )
+                            
+                            // Создаем виртуальные экземпляры для каждой даты
+                            for date in dates {
+                                var recEvent = event
+                                recEvent.date = date
+                                allEvents.append(recEvent)
+                            }
+                        } else {
+                            allEvents.append(event)
+                        }
+                    }
+                    
+                    self.events = allEvents
+                    print("Загружено базовых событий: \(baseEvents.count), всего с повторениями: \(allEvents.count)")
                 }
             }
         }
     }
-
     // Получение цвета для типа события
     func colorForEventType(_ type: String) -> Color {
         switch type {

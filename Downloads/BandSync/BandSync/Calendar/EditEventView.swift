@@ -207,8 +207,8 @@ struct EditEventView: View {
             .setData(updatedEvent.asDictionary) { error in
                 if error == nil {
                     // Сохраняем или обновляем контакты
-                    saveContact(updatedEvent.organizer, role: "Organizer")
-                    saveContact(updatedEvent.coordinator, role: "Coordinator")
+                    saveContact(updatedEvent.organizer, role: "Organizer", groupId: updatedEvent.groupId)
+                    saveContact(updatedEvent.coordinator, role: "Coordinator", groupId: updatedEvent.groupId)
 
                     presentationMode.wrappedValue.dismiss()
                 } else {
@@ -218,7 +218,7 @@ struct EditEventView: View {
     }
 
     // Функция для сохранения контактов в Firebase
-    func saveContact(_ contact: EventContact, role: String) {
+    func saveContact(_ contact: EventContact, role: String, groupId: String) {
         // Проверяем, что хотя бы имя указано
         if contact.name.isEmpty {
             return // Пропускаем пустые контакты
@@ -231,12 +231,13 @@ struct EditEventView: View {
             "email": contact.email,
             "role": role,
             "venue": updatedEvent.location,
+            "groupId": groupId,  // Важно: добавляем groupId
             "rating": 0,
             "notes": "",
             "createdAt": FieldValue.serverTimestamp()
         ]
 
-        // Проверяем наличие контакта по имени (вместо телефона, который может быть пустым)
+        // Проверяем наличие контакта по имени
         db.collection("contacts")
             .whereField("name", isEqualTo: contact.name)
             .getDocuments { snapshot, error in
@@ -272,4 +273,4 @@ struct EditEventView: View {
                 }
             }
     }
-}
+    }

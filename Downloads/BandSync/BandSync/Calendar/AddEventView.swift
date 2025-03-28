@@ -15,6 +15,12 @@ struct AddEventView: View {
     @State private var fee = ""
     @State private var notes = ""
     @State private var searchLocation = ""
+    @State private var isRecurringEvent = false
+    @State private var selectedRecurrenceType: RecurrenceHelper.RecurrenceType? = nil
+    @State private var recurrenceEndDate: Date? = nil
+    @State private var recurrenceInterval = 1
+    @State private var showRecurrenceOptions = false
+    @State private var selectedDaysOfWeek: [Int]? = nil
     @State private var showingLocationSearch = false
     @State private var mapRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 50.450001, longitude: 30.523333),
@@ -30,6 +36,41 @@ struct AddEventView: View {
     @State private var showingSetlistPicker = false
     @State private var isPersonalEvent = false
     @State private var currentSection = 0 // 0 - основная информация, 1 - детали, 2 - расписание
+    @State private var showRecurrenceSettings = false
+
+    private var recurrenceSummary: String {
+        guard let type = selectedRecurrenceType else { return "Not set" }
+        
+        var summary = "Every "
+        if recurrenceInterval > 1 {
+            summary += "\(recurrenceInterval) "
+        }
+        
+        switch type {
+        case .daily:
+            summary += recurrenceInterval == 1 ? "day" : "days"
+        case .weekly:
+            summary += recurrenceInterval == 1 ? "week" : "weeks"
+            
+            if let days = selectedDaysOfWeek, !days.isEmpty {
+                let dayNames = ["S", "M", "T", "W", "T", "F", "S"]
+                summary += " on " + days.sorted().map { dayNames[$0 - 1] }.joined(separator: ", ")
+            }
+        case .monthly:
+            summary += recurrenceInterval == 1 ? "month" : "months"
+        case .yearly:
+            summary += recurrenceInterval == 1 ? "year" : "years"
+        }
+        
+        if let endDate = recurrenceEndDate {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            formatter.timeStyle = .none
+            summary += " until \(formatter.string(from: endDate))"
+        }
+        
+        return summary
+    }
     
     // Шаблоны для автоматического заполнения
     let eventTemplates: [String: [String: Any]] = [
@@ -116,6 +157,55 @@ struct AddEventView: View {
                                     FormField(title: "Название события", systemImage: "square.text.square") {
                                         TextField("Введите название", text: $title)
                                             .font(.headline)
+                                    }
+                                    // Секция с настройками повторений
+                                    FormCard {
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            HStack {
+                                                Image(systemName: "repeat")
+                                                    .foregroundColor(.blue)
+                                                    .frame(width: 24, height: 24)
+                                                
+                                                Text("Repeat")
+                                                    .font(.headline)
+                                                
+                                                Spacer()
+                                                
+                                                Toggle("", isOn: $isRecurringEvent)
+                                            }
+                                            
+                                            if isRecurringEvent {
+                                                Divider()
+                                                
+                                                // Сводка о повторении
+                                                VStack(alignment: .leading, spacing: 8) {
+                                                    HStack {
+                                                        Text(recurrenceSummary)
+                                                            .foregroundColor(.secondary)
+                                                        
+                                                        Spacer()
+                                                        
+                                                        Button(action: {
+                                                            showRecurrenceSettings = true
+                                                        }) {
+                                                            Text("Edit")
+                                                                .foregroundColor(.blue)
+                                                        }
+                                                    }
+                                                }
+                                                .padding(.leading, 30)
+                                            }
+                                        }
+                                        .padding()
+                                    }
+                                    .sheet(isPresented: $showRecurrenceSettings) {
+                                        RecurrenceView(
+                                            isRecurring: $isRecurringEvent,
+                                            recurrenceType: $selectedRecurrenceType,
+                                            recurrenceInterval: $recurrenceInterval,
+                                            recurrenceEndDate: $recurrenceEndDate,
+                                            selectedDaysOfWeek: $selectedDaysOfWeek
+                                        )
                                     }
                                     
                                     Divider()
@@ -534,6 +624,31 @@ struct AddEventView: View {
             }
         }
     }
+    // Функция для получения короткого названия дня недели
+    private func weekdayLabel(_ day: Int) -> String {
+        let calendar = Calendar.current
+        let weekdaySymbols = calendar.shortWeekdaySymbols
+        // День 1 соответствует воскресенью в календаре iOS
+        return String(weekdaySymbols[day - 1].prefix(1))
+    }
+
+    // Функция для проверки, выбран ли день недели
+    private func isWeekdaySelected(_ day: Int) -> Bool {
+        return selectedDaysOfWeek?.contains(day) ?? false
+    }
+
+    // Функция для переключения дня недели
+    private func toggleWeekday(_ day: Int) {
+        if selectedDaysOfWeek == nil {
+            selectedDaysOfWeek = []
+        }
+        
+        if let index = selectedDaysOfWeek?.firstIndex(of: day) {
+            selectedDaysOfWeek?.remove(at: index)
+        } else {
+            selectedDaysOfWeek?.append(day)
+        }
+    }
     
     // Проверка необходимости сетлиста для данного типа события
     private func eventNeedsSetlist(_ type: String) -> Bool {
@@ -570,27 +685,30 @@ struct AddEventView: View {
     }
     
     func saveEvent() {
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
-            print("❌ Пользователь не авторизован")
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("Не удалось получить ID пользователя")
             return
         }
         
         let db = Firestore.firestore()
         
-        // Сначала получаем groupId пользователя
-        db.collection("users").document(currentUserId).getDocument { [self] userDoc, userError in
-            if let userError = userError {
-                print("❌ Ошибка при получении данных пользователя: \(userError.localizedDescription)")
+        // Сначала получаем groupId текущего пользователя
+        db.collection("users").document(userId).getDocument { [self] (document, error) in
+            if let error = error {
+                print("Ошибка при получении данных пользователя: \(error)")
                 return
             }
             
-            guard let userData = userDoc?.data(),
-                  let groupId = userData["groupId"] as? String else {
-                print("❌ Не удалось получить ID группы пользователя")
+            guard let document = document, document.exists,
+                  let data = document.data(),
+                  let groupId = data["groupId"] as? String else {
+                print("Не удалось получить groupId пользователя")
                 return
             }
             
-            // Создаем событие как и раньше
+            print("Создание события для группы: \(groupId)")
+            
+            // Теперь создаем событие с полученным groupId
             let event = Event(
                 id: UUID().uuidString,
                 title: title,
@@ -605,88 +723,66 @@ struct AddEventView: View {
                 setlist: setlist,
                 notes: notes,
                 isPersonal: isPersonalEvent,
-                schedule: schedule
+                schedule: schedule,
+                isRecurring: isRecurringEvent,
+                recurrenceType: selectedRecurrenceType?.rawValue,
+                recurrenceEndDate: recurrenceEndDate,
+                recurrenceInterval: recurrenceInterval,
+                recurrenceParentId: nil,
+                groupId: groupId,
+                recurrenceDaysOfWeek: selectedDaysOfWeek
+                
             )
             
-            // Добавляем groupId к данным события
-            var eventData: [String: Any] = [
-                "id": event.id,
-                "title": title,
-                "date": Timestamp(date: date),
-                "type": type,
-                "status": status,
-                "location": location,
-                "fee": fee,
-                "notes": notes,
-                "setlist": setlist,
-                "isPersonal": isPersonalEvent,
-                "groupId": groupId, // Добавляем ID группы - это ключевое изменение!
-                "organizer": [
-                    "name": organizer.name,
-                    "phone": organizer.phone,
-                    "email": organizer.email
-                ],
-                "coordinator": [
-                    "name": coordinator.name,
-                    "phone": coordinator.phone,
-                    "email": coordinator.email
-                ],
-                "hotel": [
-                    "address": hotel.address,
-                    "checkIn": hotel.checkIn,
-                    "checkOut": hotel.checkOut
-                ],
-                "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] }
-            ]
+            // Создаем данные для сохранения
+            var eventData = event.asDictionary
+            if eventData["groupId"] as? String == "" {
+                eventData["groupId"] = groupId
+            }
             
-            // Также можно добавить userId для дополнительной безопасности
-            eventData["createdBy"] = currentUserId
-            
+            // Сохраняем событие с groupId
             db.collection("events").document(event.id).setData(eventData) { error in
                 if let error = error {
                     print("❌ Error saving event: \(error.localizedDescription)")
                 } else {
-                    // Передаем groupId при сохранении контактов
-                    self.saveContact(self.organizer, role: "Organizer", groupId: groupId)
-                    self.saveContact(self.coordinator, role: "Coordinator", groupId: groupId)
+                    saveContact(organizer, role: "Organizer", groupId: groupId)
+                    saveContact(coordinator, role: "Coordinator", groupId: groupId)
                     
-                    self.onSave(event)
-                    self.presentationMode.wrappedValue.dismiss()
+                    onSave(event)
+                    presentationMode.wrappedValue.dismiss()
                 }
             }
         }
     }
-
     // Обновленная функция для сохранения контактов с учетом groupId
     func saveContact(_ contact: EventContact, role: String, groupId: String) {
         // Проверяем, что хотя бы имя указано
         if contact.name.isEmpty {
             return // Пропускаем пустые контакты
         }
-        
+
         let db = Firestore.firestore()
-        var contactData: [String: Any] = [
+        let contactData: [String: Any] = [
             "name": contact.name,
             "phone": contact.phone,
             "email": contact.email,
             "role": role,
             "venue": location,
+            "groupId": groupId, // Добавляем groupId
             "rating": 0,
             "notes": "",
-            "groupId": groupId, // Добавляем groupId
             "createdAt": FieldValue.serverTimestamp()
         ]
-        
-        // Проверяем наличие контакта по имени И группе
+
+        // Проверяем наличие контакта по имени
         db.collection("contacts")
             .whereField("name", isEqualTo: contact.name)
-            .whereField("groupId", isEqualTo: groupId) // Добавляем фильтр по группе
             .getDocuments { snapshot, error in
                 if let error = error {
                     print("❌ Error checking contact: \(error.localizedDescription)")
                     return
                 }
-                
+
                 if let snapshot = snapshot, snapshot.documents.isEmpty {
                     // Если контакт не существует, создаем новый с уникальным ID
                     db.collection("contacts").document().setData(contactData) { error in
@@ -700,9 +796,10 @@ struct AddEventView: View {
                     // Если контакт существует, обновляем информацию
                     if let document = snapshot?.documents.first {
                         // Добавляем поле обновления
-                        contactData["updatedAt"] = FieldValue.serverTimestamp()
-                        
-                        db.collection("contacts").document(document.documentID).updateData(contactData) { error in
+                        var updatedData = contactData
+                        updatedData["updatedAt"] = FieldValue.serverTimestamp()
+
+                        db.collection("contacts").document(document.documentID).updateData(updatedData) { error in
                             if let error = error {
                                 print("❌ Error updating contact: \(error.localizedDescription)")
                             } else {

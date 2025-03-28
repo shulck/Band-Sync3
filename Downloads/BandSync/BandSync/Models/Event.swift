@@ -36,7 +36,7 @@ struct Event: Identifiable, Codable {
     var notes: String
     var schedule: [DailyScheduleItem]
     var isPersonal: Bool = false
-    var groupId: String?
+    var groupId: String = ""
     
     // Поля для повторяющихся событий
     var isRecurring: Bool = false
@@ -49,6 +49,7 @@ struct Event: Identifiable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, title, date, type, status, location, organizer, coordinator, hotel, fee, setlist, notes, schedule, isPersonal
         case isRecurring, recurrenceType, recurrenceEndDate, recurrenceInterval, recurrenceParentId, recurrenceDaysOfWeek
+        case groupId
     }
 
     init(id: String = UUID().uuidString,
@@ -70,8 +71,10 @@ struct Event: Identifiable, Codable {
          recurrenceEndDate: Date? = nil,
          recurrenceInterval: Int = 1,
          recurrenceParentId: String? = nil,
+         groupId: String = "",
          recurrenceDaysOfWeek: [Int]? = nil) {
         self.id = id
+        self.groupId = groupId
         self.title = title
         self.date = date
         self.type = type
@@ -198,6 +201,7 @@ struct Event: Identifiable, Codable {
     var asDictionary: [String: Any] {
         var dict: [String: Any] = [
             "id": id,
+            "groupId": groupId,
             "title": title,
             "date": Timestamp(date: date),
             "type": type,
