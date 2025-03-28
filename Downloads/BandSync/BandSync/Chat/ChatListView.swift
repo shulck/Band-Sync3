@@ -11,12 +11,13 @@ struct ChatListView: View {
     @State private var chatToEdit: ChatRoom?
     @State private var editChatName = ""
 
-    var filteredChatRooms: [ChatRoom] {
+    // Упрощённая версия фильтрации
+    private var filteredRooms: [ChatRoom] {
         if searchText.isEmpty {
             return chatService.chatRooms
         } else {
             return chatService.chatRooms.filter {
-                $0.name.lowercased().contains(searchText.lowercased())
+                $0.name.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
@@ -63,7 +64,7 @@ struct ChatListView: View {
                     .padding()
                 } else {
                     List {
-                        ForEach(filteredChatRooms) { chatRoom in
+                        ForEach(filteredRooms) { chatRoom in
                             NavigationLink(destination: ChatView(chatRoom: chatRoom)) {
                                 HStack(spacing: 12) {
                                     // Аватар чата с улучшенным дизайном
@@ -179,7 +180,12 @@ struct ChatListView: View {
             })
 
             .sheet(isPresented: $showingNewChatView) {
-                NewChatView(chatService: chatService)
+                // Исправленный вызов - создаем новый пустой ChatRoom
+                ChatView(chatRoom: ChatRoom(
+                    name: "Новый чат",
+                    participants: [Auth.auth().currentUser?.uid].compactMap { $0 },
+                    isGroupChat: false
+                ))
             }
             .alert("Удалить чат?", isPresented: $showDeleteAlert) {
                 Button("Отмена", role: .cancel) {}
@@ -192,18 +198,8 @@ struct ChatListView: View {
                 Text("Вы уверены, что хотите удалить чат? Это действие невозможно отменить.")
             }
             .sheet(item: $chatToEdit) { chatRoom in
-                EditChatView(
-                    chatId: chatRoom.id,
-                    chatName: $editChatName,
-                    onSave: { success in
-                        if success {
-                            // Обновляем список чатов
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                chatService.fetchChatRooms()
-                            }
-                        }
-                    }
-                )
+                // Исправленный вызов - используем существующий ChatRoom
+                ChatView(chatRoom: chatRoom)
             }
             .onAppear {
                 chatService.fetchChatRooms()
