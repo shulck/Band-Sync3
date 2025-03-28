@@ -36,6 +36,7 @@ struct Event: Identifiable, Codable {
     var notes: String
     var schedule: [DailyScheduleItem]
     var isPersonal: Bool = false
+    var groupId: String?
     
     // Поля для повторяющихся событий
     var isRecurring: Bool = false

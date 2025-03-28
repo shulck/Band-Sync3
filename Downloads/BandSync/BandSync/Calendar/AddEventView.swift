@@ -1,11 +1,12 @@
 import SwiftUI
 import FirebaseFirestore
 import MapKit
+import FirebaseAuth
 
 struct AddEventView: View {
     @Environment(\.presentationMode) var presentationMode
     var onSave: (Event) -> Void
-
+    
     @State private var title = ""
     @State private var date = Date()
     @State private var type = "Concert"
@@ -19,17 +20,17 @@ struct AddEventView: View {
         center: CLLocationCoordinate2D(latitude: 50.450001, longitude: 30.523333),
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
-
+    
     @State private var organizer = EventContact(name: "", phone: "", email: "")
     @State private var coordinator = EventContact(name: "", phone: "", email: "")
     @State private var hotel = Hotel(address: "", checkIn: "", checkOut: "")
-
+    
     @State private var setlist: [String] = []
     @State private var schedule: [DailyScheduleItem] = []
     @State private var showingSetlistPicker = false
     @State private var isPersonalEvent = false
     @State private var currentSection = 0 // 0 - основная информация, 1 - детали, 2 - расписание
-
+    
     // Шаблоны для автоматического заполнения
     let eventTemplates: [String: [String: Any]] = [
         "Concert": [
@@ -87,10 +88,10 @@ struct AddEventView: View {
             ]
         ]
     ]
-
+    
     let eventTypes = ["Concert", "Festival", "Meeting", "Rehearsal", "Photo Session", "Interview"]
     let statusOptions = ["Reserved", "Confirmed"]
-
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -533,110 +534,138 @@ struct AddEventView: View {
             }
         }
     }
-
+    
     // Проверка необходимости сетлиста для данного типа события
     private func eventNeedsSetlist(_ type: String) -> Bool {
         return ["Concert", "Festival", "Rehearsal"].contains(type)
     }
-
+    
     // Проверка необходимости информации об отеле
     private func eventNeedsHotel(_ type: String) -> Bool {
         return ["Concert", "Festival", "Meeting", "Photo Session", "Interview"].contains(type)
     }
-
+    
     // Проверка необходимости информации о гонораре
     private func eventNeedsFee(_ type: String) -> Bool {
         return ["Concert", "Festival", "Photo Session"].contains(type)
     }
-
+    
     // Проверка необходимости информации о координаторе
     private func eventNeedsCoordinator(_ type: String) -> Bool {
         return ["Concert", "Festival"].contains(type)
     }
-
+    
     // Проверка необходимости информации об организаторе
     private func eventNeedsOrganizer(_ type: String) -> Bool {
         return ["Concert", "Festival", "Meeting", "Rehearsal", "Photo Session", "Interview"].contains(type)
     }
-
+    
     func addScheduleItem() {
         let newItem = DailyScheduleItem(time: "12:00", activity: "")
         schedule.append(newItem)
     }
-
+    
     func deleteScheduleItem(at offsets: IndexSet) {
         schedule.remove(atOffsets: offsets)
     }
-
+    
     func saveEvent() {
-        let db = Firestore.firestore()
-        let event = Event(
-            id: UUID().uuidString,
-            title: title,
-            date: date,
-            type: type,
-            status: status,
-            location: location,
-            organizer: organizer,
-            coordinator: coordinator,
-            hotel: hotel,
-            fee: fee,
-            setlist: setlist,
-            notes: notes,
-            isPersonal: isPersonalEvent,
-            schedule: schedule
-        )
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("❌ Пользователь не авторизован")
+            return
+        }
         
-
-        db.collection("events").document(event.id).setData([
-            "id": event.id,
-            "title": title,
-            "date": Timestamp(date: date),
-            "type": type,
-            "status": status,
-            "location": location,
-            "fee": fee,
-            "notes": notes,
-            "setlist": setlist,
-            "isPersonal": isPersonalEvent,
-            "organizer": [
-                "name": organizer.name,
-                "phone": organizer.phone,
-                "email": organizer.email
-            ],
-            "coordinator": [
-                "name": coordinator.name,
-                "phone": coordinator.phone,
-                "email": coordinator.email
-            ],
-            "hotel": [
-                "address": hotel.address,
-                "checkIn": hotel.checkIn,
-                "checkOut": hotel.checkOut
-            ],
-            "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] }
-        ]) { error in
-            if let error = error {
-                print("❌ Error saving event: \(error.localizedDescription)")
-            } else {
-                saveContact(organizer, role: "Organizer")
-                saveContact(coordinator, role: "Coordinator")
-
-                onSave(event)
-                presentationMode.wrappedValue.dismiss()
+        let db = Firestore.firestore()
+        
+        // Сначала получаем groupId пользователя
+        db.collection("users").document(currentUserId).getDocument { [self] userDoc, userError in
+            if let userError = userError {
+                print("❌ Ошибка при получении данных пользователя: \(userError.localizedDescription)")
+                return
+            }
+            
+            guard let userData = userDoc?.data(),
+                  let groupId = userData["groupId"] as? String else {
+                print("❌ Не удалось получить ID группы пользователя")
+                return
+            }
+            
+            // Создаем событие как и раньше
+            let event = Event(
+                id: UUID().uuidString,
+                title: title,
+                date: date,
+                type: type,
+                status: status,
+                location: location,
+                organizer: organizer,
+                coordinator: coordinator,
+                hotel: hotel,
+                fee: fee,
+                setlist: setlist,
+                notes: notes,
+                isPersonal: isPersonalEvent,
+                schedule: schedule
+            )
+            
+            // Добавляем groupId к данным события
+            var eventData: [String: Any] = [
+                "id": event.id,
+                "title": title,
+                "date": Timestamp(date: date),
+                "type": type,
+                "status": status,
+                "location": location,
+                "fee": fee,
+                "notes": notes,
+                "setlist": setlist,
+                "isPersonal": isPersonalEvent,
+                "groupId": groupId, // Добавляем ID группы - это ключевое изменение!
+                "organizer": [
+                    "name": organizer.name,
+                    "phone": organizer.phone,
+                    "email": organizer.email
+                ],
+                "coordinator": [
+                    "name": coordinator.name,
+                    "phone": coordinator.phone,
+                    "email": coordinator.email
+                ],
+                "hotel": [
+                    "address": hotel.address,
+                    "checkIn": hotel.checkIn,
+                    "checkOut": hotel.checkOut
+                ],
+                "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] }
+            ]
+            
+            // Также можно добавить userId для дополнительной безопасности
+            eventData["createdBy"] = currentUserId
+            
+            db.collection("events").document(event.id).setData(eventData) { error in
+                if let error = error {
+                    print("❌ Error saving event: \(error.localizedDescription)")
+                } else {
+                    // Передаем groupId при сохранении контактов
+                    self.saveContact(self.organizer, role: "Organizer", groupId: groupId)
+                    self.saveContact(self.coordinator, role: "Coordinator", groupId: groupId)
+                    
+                    self.onSave(event)
+                    self.presentationMode.wrappedValue.dismiss()
+                }
             }
         }
     }
-    
-    // Функция для сохранения контактов в Firebase
-    func saveContact(_ contact: EventContact, role: String) {
+
+    // Обновленная функция для сохранения контактов с учетом groupId
+    func saveContact(_ contact: EventContact, role: String, groupId: String) {
         // Проверяем, что хотя бы имя указано
         if contact.name.isEmpty {
             return // Пропускаем пустые контакты
         }
-
+        
         let db = Firestore.firestore()
-        let contactData: [String: Any] = [
+        var contactData: [String: Any] = [
             "name": contact.name,
             "phone": contact.phone,
             "email": contact.email,
@@ -644,18 +673,20 @@ struct AddEventView: View {
             "venue": location,
             "rating": 0,
             "notes": "",
+            "groupId": groupId, // Добавляем groupId
             "createdAt": FieldValue.serverTimestamp()
         ]
-
-        // Проверяем наличие контакта по имени
+        
+        // Проверяем наличие контакта по имени И группе
         db.collection("contacts")
             .whereField("name", isEqualTo: contact.name)
+            .whereField("groupId", isEqualTo: groupId) // Добавляем фильтр по группе
             .getDocuments { snapshot, error in
                 if let error = error {
                     print("❌ Error checking contact: \(error.localizedDescription)")
                     return
                 }
-
+                
                 if let snapshot = snapshot, snapshot.documents.isEmpty {
                     // Если контакт не существует, создаем новый с уникальным ID
                     db.collection("contacts").document().setData(contactData) { error in
@@ -669,10 +700,9 @@ struct AddEventView: View {
                     // Если контакт существует, обновляем информацию
                     if let document = snapshot?.documents.first {
                         // Добавляем поле обновления
-                        var updatedData = contactData
-                        updatedData["updatedAt"] = FieldValue.serverTimestamp()
-
-                        db.collection("contacts").document(document.documentID).updateData(updatedData) { error in
+                        contactData["updatedAt"] = FieldValue.serverTimestamp()
+                        
+                        db.collection("contacts").document(document.documentID).updateData(contactData) { error in
                             if let error = error {
                                 print("❌ Error updating contact: \(error.localizedDescription)")
                             } else {
@@ -683,68 +713,67 @@ struct AddEventView: View {
                 }
             }
     }
-}
-
-// MARK: - Вспомогательные компоненты
-
-struct FormCard<Content: View>: View {
-    @ViewBuilder var content: Content
+    // MARK: - Вспомогательные компоненты
     
-    var body: some View {
-        content
-            .padding()
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(16)
-            .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 2)
-            .padding(.horizontal)
+    struct FormCard<Content: View>: View {
+        @ViewBuilder var content: Content
+        
+        var body: some View {
+            content
+                .padding()
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 2)
+                .padding(.horizontal)
+        }
     }
-}
-
-struct FormField<Content: View>: View {
-    var title: String
-    var systemImage: String
-    @ViewBuilder var content: Content
     
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: systemImage)
-                .foregroundColor(.blue)
-                .frame(width: 24, height: 24)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+    struct FormField<Content: View>: View {
+        var title: String
+        var systemImage: String
+        @ViewBuilder var content: Content
+        
+        var body: some View {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: systemImage)
+                    .foregroundColor(.blue)
+                    .frame(width: 24, height: 24)
                 
-                content
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-struct SegmentedPicker: View {
-    var options: [String]
-    @Binding var selectedIndex: Int
-    
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(0..<options.count, id: \.self) { index in
-                Button(action: {
-                    withAnimation(.spring()) {
-                        selectedIndex = index
-                    }
-                }) {
-                    Text(options[index])
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 4)
-                        .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    content
                 }
-                .background(selectedIndex == index ? Color.blue : Color.clear)
-                .foregroundColor(selectedIndex == index ? .white : .primary)
             }
+            .padding(.vertical, 4)
         }
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(10)
+    }
+    
+    struct SegmentedPicker: View {
+        var options: [String]
+        @Binding var selectedIndex: Int
+        
+        var body: some View {
+            HStack(spacing: 0) {
+                ForEach(0..<options.count, id: \.self) { index in
+                    Button(action: {
+                        withAnimation(.spring()) {
+                            selectedIndex = index
+                        }
+                    }) {
+                        Text(options[index])
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 4)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .background(selectedIndex == index ? Color.blue : Color.clear)
+                    .foregroundColor(selectedIndex == index ? .white : .primary)
+                }
+            }
+            .background(Color(UIColor.tertiarySystemBackground))
+            .cornerRadius(10)
+        }
     }
 }

@@ -138,42 +138,71 @@ struct ChatView: View {
     }
     private var messageInputArea: some View {
         VStack(spacing: 0) {
-            // Индикатор ответа с текстом сообщения
+            // Стильный и современный индикатор ответа
             if let replyMessage = replyingToMessage {
-                HStack(spacing: 2) {
+                HStack(spacing: 4) {
+                    // Вертикальная линия с градиентом
                     Rectangle()
-                        .fill(Color.blue.opacity(0.7))
-                        .frame(width: 2)
+                        .fill(LinearGradient(
+                            gradient: Gradient(colors: [.blue.opacity(0.7), .blue]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                        .frame(width: 3)
 
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(replyMessage.senderName)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.blue)
-                            .lineLimit(1)
+                    // Улучшенное отображение информации с иконкой ответа
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.blue.opacity(0.7))
 
-                        Text(replyMessage.text)
-                            .font(.system(size: 9))
-                            .foregroundColor(.gray)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(replyMessage.senderName)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.primary.opacity(0.8))
+                                .lineLimit(1)
+
+                            Text(replyMessage.text)
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                     }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 2)
 
-                    Spacer(minLength: 2)
+                    Spacer(minLength: 4)
 
+                    // Стильная кнопка закрытия
                     Button(action: {
-                        replyingToMessage = nil
+                        withAnimation(.spring()) {
+                            replyingToMessage = nil
+                        }
                     }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8))
-                            .foregroundColor(.gray)
+                        ZStack {
+                            Circle()
+                                .fill(Color.gray.opacity(0.15))
+                                .frame(width: 20, height: 20)
+
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.gray)
+                        }
                     }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
-                .padding(.vertical, 3)
-                .padding(.horizontal, 6)
-                .background(Color.gray.opacity(0.05))
-                .cornerRadius(4)
-                .padding(.horizontal, 2)
-                .frame(height: 51) // Увеличено с 36 до 51
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.08))
+                        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+                )
+                .padding(.horizontal, 4)
+                .padding(.top, 4)
+                .frame(height: 51)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             Divider()
@@ -343,4 +372,4 @@ struct ChatView: View {
             currentController.present(alert, animated: true)
         }
     }
-    }
+}

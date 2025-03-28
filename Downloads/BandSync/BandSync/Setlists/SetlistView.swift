@@ -2,101 +2,6 @@ import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
 
-class SetlistManager: ObservableObject {
-    @Published var setlists: [Setlist] = []
-
-    func fetchSetlists() {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            return
-        }
-
-        let db = Firestore.firestore()
-        db.collection("setlists")
-            .whereField("userId", isEqualTo: userId)
-            .getDocuments { snapshot, error in
-                if let error = error {
-                    print("Error loading setlists: \(error.localizedDescription)")
-                    return
-                }
-
-                self.setlists = snapshot?.documents.compactMap { document -> Setlist? in
-                    let data = document.data()
-
-                    guard let id = data["id"] as? String,
-                          let name = data["name"] as? String,
-                          let songsData = data["songs"] as? [[String: Any]] else {
-                        return nil
-                    }
-
-                    let songs = songsData.compactMap { songData -> Song? in
-                        guard let id = songData["id"] as? String,
-                              let title = songData["title"] as? String,
-                              let duration = songData["duration"] as? TimeInterval else {
-                            return nil
-                        }
-
-                        let tempoBPM = songData["tempoBPM"] as? Int
-
-                        return Song(
-                            id: id,
-                            title: title,
-                            duration: duration,
-                            tempoBPM: tempoBPM
-                        )
-                    }
-
-                    return Setlist(id: id, name: name, songs: songs)
-                } ?? []
-
-                self.setlists.sort { $0.name < $1.name }
-            }
-    }
-
-    func deleteSetlist(_ setlistId: String) {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            return
-        }
-
-        let db = Firestore.firestore()
-        db.collection("setlists").document(setlistId).delete { error in
-            if let error = error {
-                print("Error deleting setlist: \(error.localizedDescription)")
-            } else {
-                self.fetchSetlists()
-            }
-        }
-    }
-
-    func saveSetlist(_ setlist: Setlist, completion: @escaping (Error?) -> Void) {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            completion(NSError(domain: "SetlistManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"]))
-            return
-        }
-
-        let db = Firestore.firestore()
-        let setlistData: [String: Any] = [
-            "id": setlist.id,
-            "name": setlist.name,
-            "userId": userId,
-            "songs": setlist.songs.map { song in
-                [
-                    "id": song.id,
-                    "title": song.title,
-                    "duration": song.duration,
-                    "tempoBPM": song.tempoBPM ?? 120
-                ]
-            }
-        ]
-
-        db.collection("setlists").document(setlist.id).setData(setlistData) { error in
-            if error == nil {
-                self.fetchSetlists()
-            }
-            completion(error)
-        }
-    }
-}
-
 struct SetlistView: View {
     @State private var setlists: [Setlist] = []
     @State private var isLoading = true
@@ -369,6 +274,8 @@ struct Setlist: Identifiable {
     var id: String
     var name: String
     var songs: [Song]
+    var isShared: Bool = false // Новое поле, означающее что сетлист общедоступен
+    var ownerUserId: String?   // ID пользователя-владельца
 }
 
 struct Song: Identifiable, Equatable {

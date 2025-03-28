@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 struct SetlistPickerView: View {
     @Environment(\.presentationMode) var presentationMode

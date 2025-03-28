@@ -1,6 +1,7 @@
 import SwiftUI
 import FirebaseFirestore
 import FSCalendar
+import FirebaseAuth
 
 struct CalendarView: View {
     @State private var selectedDate = Date()
@@ -141,11 +142,40 @@ struct CalendarView: View {
 
     // Получение данных о событиях из Firebase
     func fetchEvents() {
+        // Сначала получаем ID группы текущего пользователя
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("Пользователь не авторизован")
+            return
+        }
+        
         let db = Firestore.firestore()
-        db.collection("events").getDocuments { snapshot, error in
-            if let snapshot = snapshot {
-                self.events = snapshot.documents.compactMap { doc in
-                    Event(from: doc.data(), id: doc.documentID)
+        
+        // Получаем groupId текущего пользователя
+        db.collection("users").document(currentUserId).getDocument { userDoc, userError in
+            if let userError = userError {
+                print("Ошибка при получении данных пользователя: \(userError.localizedDescription)")
+                return
+            }
+            
+            guard let userData = userDoc?.data(),
+                  let groupId = userData["groupId"] as? String else {
+                print("Не удалось получить ID группы пользователя")
+                return
+            }
+            
+            // Теперь получаем только события для этой группы
+            db.collection("events")
+              .whereField("groupId", isEqualTo: groupId)
+              .getDocuments { snapshot, error in
+                if let error = error {
+                    print("Ошибка при получении событий: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let snapshot = snapshot {
+                    self.events = snapshot.documents.compactMap { doc in
+                        Event(from: doc.data(), id: doc.documentID)
+                    }
                 }
             }
         }
