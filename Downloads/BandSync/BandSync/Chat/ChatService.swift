@@ -440,19 +440,34 @@ class ChatService: ObservableObject {
         }
 
         // Находим сообщение в локальном массиве
-        guard let index = messages.firstIndex(where: { $0.id == messageId && $0.senderId == userId }) else {
-            errorMessage = "Сообщение не найдено или вы не имеете прав на его удаление"
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else {
+            errorMessage = "Сообщение не найдено"
+            return
+        }
+        
+        // Проверяем, имеет ли пользователь право удалять это сообщение
+        let message = messages[index]
+        guard message.senderId == userId else {
+            errorMessage = "У вас нет прав на удаление этого сообщения"
             return
         }
 
         // Проверяем, является ли сообщение последним перед удалением
         let isLastMessage = index == messages.count - 1
-
+        
+        // Сначала создаем локальную копию сообщения перед удалением из массива
+        let messageToDelete = messages[index]
+        
         // Удаляем сообщение из Firebase
         let messageRef = db.collection("chatRooms")
             .document(chatRoomId)
             .collection("messages")
             .document(messageId)
+
+        // Сначала удаляем сообщение из локального массива для мгновенного отклика UI
+        DispatchQueue.main.async {
+            self.messages.remove(at: index)
+        }
 
         messageRef.delete { [weak self] error in
             guard let self = self else { return }
@@ -460,15 +475,21 @@ class ChatService: ObservableObject {
             if let error = error {
                 print("⛔️ Error deleting message: \(error.localizedDescription)")
                 self.errorMessage = "Ошибка удаления сообщения: \(error.localizedDescription)"
-            } else {
-                // Удаляем локальное сообщение
+                
+                // Возвращаем сообщение обратно в массив, если произошла ошибка
                 DispatchQueue.main.async {
-                    self.messages.remove(at: index)
-
-                    // Обновляем последнее сообщение в чате, если удалили последнее
-                    if isLastMessage {
-                        self.updateLastMessageAfterDeletion(in: chatRoomId)
+                    if index < self.messages.count {
+                        self.messages.insert(messageToDelete, at: index)
+                    } else {
+                        self.messages.append(messageToDelete)
                     }
+                }
+            } else {
+                print("✅ Сообщение успешно удалено: \(messageId)")
+
+                // Обновляем последнее сообщение в чате, если удалили последнее
+                if isLastMessage {
+                    self.updateLastMessageAfterDeletion(in: chatRoomId)
                 }
             }
         }
