@@ -174,6 +174,7 @@ struct ChatListView: View {
                     }
                 }
             }
+            .navigationTitle("Чаты")
             .navigationBarItems(trailing: Button(action: {
                 showingNewChatView = true
             }) {
