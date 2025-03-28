@@ -11,6 +11,7 @@ struct ChatView: View {
     @State private var showEmojiPicker = false
     @State private var scrollToBottom = true
     @State private var editingMessage: ChatMessage?
+    @State private var replyingToMessage: ChatMessage?
     // Важно: перемещаем переменную высоты поля сюда - на уровень структуры
     @State private var textFieldHeight: CGFloat = 32
 
@@ -22,7 +23,7 @@ struct ChatView: View {
     var body: some View {
             VStack(spacing: 0) {
                 messagesScrollView
-                
+
                 if isCurrentUserInChat {
                     messageInputArea
                 } else {
@@ -43,14 +44,14 @@ struct ChatView: View {
                 chatService.stopListening()
             }
         }
-        
+
         // Отдельные компоненты представления
         private var messagesScrollView: some View {
             ScrollViewReader { scrollView in
                 ScrollView {
                     VStack(spacing: 0) {
                         loadPreviousMessagesButton
-                        
+
                         messagesContent
                     }
                 }
@@ -60,7 +61,7 @@ struct ChatView: View {
                 .background(Color(.systemGroupedBackground))
             }
         }
-        
+
         private var loadPreviousMessagesButton: some View {
             Group {
                 if chatService.hasMoreMessages {
@@ -80,7 +81,7 @@ struct ChatView: View {
                 }
             }
         }
-        
+
     private var messagesContent: some View {
         LazyVStack(spacing: 12) {
             ForEach(chatService.messages) { message in
@@ -102,10 +103,12 @@ struct ChatView: View {
                 handleDeleteMessage(message)
             },
             onReply: {
-                // Добавьте обработчик для ответа если необходимо
+                // Вот этот код вызывается при нажатии на "Ответить"
+                replyingToMessage = message
             },
             onTapReply: { messageId in
-                // Обработчик нажатия на сообщение с ответом
+                // Этот код вызывается при нажатии на цитируемое сообщение
+                // Его пока можно оставить пустым
             }
         )
         .id(message.id)
@@ -133,22 +136,89 @@ struct ChatView: View {
             resendMessage(message)
         }
     }
-        private var messageInputArea: some View {
-            VStack(spacing: 0) {
-                Divider()
-                
-                HStack(spacing: 8) {
-                    emojiButton
-                    messageTextField
-                    sendButton
+    private var messageInputArea: some View {
+        VStack(spacing: 0) {
+            // Стильный и современный индикатор ответа
+            if let replyMessage = replyingToMessage {
+                HStack(spacing: 4) {
+                    // Вертикальная линия с градиентом
+                    Rectangle()
+                        .fill(LinearGradient(
+                            gradient: Gradient(colors: [.blue.opacity(0.7), .blue]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                        .frame(width: 3)
+
+                    // Улучшенное отображение информации с иконкой ответа
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.blue.opacity(0.7))
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(replyMessage.senderName)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.primary.opacity(0.8))
+                                .lineLimit(1)
+
+                            Text(replyMessage.text)
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 2)
+
+                    Spacer(minLength: 4)
+
+                    // Стильная кнопка закрытия
+                    Button(action: {
+                        withAnimation(.spring()) {
+                            replyingToMessage = nil
+                        }
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.gray.opacity(0.15))
+                                .frame(width: 20, height: 20)
+
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
-                .padding(6)
-                
-                emojiPickerView
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.08))
+                        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+                )
+                .padding(.horizontal, 4)
+                .padding(.top, 4)
+                .frame(height: 51)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .background(Color(.systemBackground))
+
+            Divider()
+
+            HStack(spacing: 8) {
+                emojiButton
+                messageTextField
+                sendButton
+            }
+            .padding(6)
+
+            emojiPickerView
         }
-        
+        .background(Color(.systemBackground))
+    }
+
         private var emojiButton: some View {
             Button(action: {
                 showEmojiPicker.toggle()
@@ -160,7 +230,7 @@ struct ChatView: View {
             }
             .padding(.leading, 4)
         }
-        
+
         private var messageTextField: some View {
             AutoGrowingTextField(
                 text: $messageText,
@@ -175,7 +245,7 @@ struct ChatView: View {
             .cornerRadius(18)
             .animation(.easeOut(duration: 0.1), value: textFieldHeight)
         }
-        
+
         private var sendButton: some View {
             Button(action: sendMessage) {
                 Image(systemName: editingMessage != nil
@@ -187,7 +257,7 @@ struct ChatView: View {
             }
             .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        
+
         private var emojiPickerView: some View {
             Group {
                 if showEmojiPicker {
@@ -199,7 +269,7 @@ struct ChatView: View {
                 }
             }
         }
-        
+
         private var nonParticipantMessage: some View {
             VStack {
                 Text("You are not a participant of this chat")
@@ -209,7 +279,7 @@ struct ChatView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(.systemBackground))
         }
-        
+
         private var toolbarItems: some ToolbarContent {
             Group {
                 if chatRoom.isGroupChat {
@@ -221,7 +291,7 @@ struct ChatView: View {
                 }
             }
         }
-        
+
         // Вспомогательные методы
         private func scrollToNewMessageIfNeeded(scrollView: ScrollViewProxy) {
             if scrollToBottom, let lastMessage = chatService.messages.last {
@@ -230,7 +300,7 @@ struct ChatView: View {
                 }
             }
         }
-        
+
         private func resendMessage(_ message: ChatMessage) {
             guard message.status == .failed else { return }
             chatService.resendMessage(message, in: chatRoom.id)
@@ -241,31 +311,49 @@ struct ChatView: View {
         guard !trimmedText.isEmpty else { return }
 
         if let editingMessage = editingMessage {
-            // Режим редактирования
+            // Режим редактирования (оставляем без изменений)
             chatService.editMessage(messageId: editingMessage.id, in: chatRoom.id, newText: trimmedText)
             self.editingMessage = nil
         } else {
             // Отправка нового сообщения
-            chatService.sendMessage(text: trimmedText, in: chatRoom.id)
+
+            // Проверяем, отвечаем ли мы на сообщение
+            if let replyMessage = replyingToMessage {
+                // Создаем данные о сообщении, на которое отвечаем
+                let replyData = ReplyData(
+                    messageId: replyMessage.id,
+                    text: replyMessage.text,
+                    senderName: replyMessage.senderName,
+                    senderId: replyMessage.senderId
+                )
+
+                // Отправляем сообщение с ответом
+                chatService.sendMessage(text: trimmedText, in: chatRoom.id, replyTo: replyData)
+
+                // Сбрасываем состояние ответа
+                replyingToMessage = nil
+            } else {
+                // Обычная отправка без ответа
+                chatService.sendMessage(text: trimmedText, in: chatRoom.id)
+            }
         }
 
         messageText = ""
         scrollToBottom = true
     }
-
     private func deleteMessage(_ message: ChatMessage) {
         // Проверяем, что сообщение отправлено текущим пользователем
         guard message.senderId == chatService.currentUserId else {
             return
         }
-        
+
         // Создаем Alert для подтверждения удаления
         let alert = UIAlertController(
             title: "Удалить сообщение?",
             message: "Это действие нельзя отменить",
             preferredStyle: .alert
         )
-        
+
         alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
         alert.addAction(UIAlertAction(title: "Удалить", style: .destructive) { _ in
             // Вызываем удаление только после подтверждения
@@ -273,7 +361,7 @@ struct ChatView: View {
                 self.chatService.deleteMessage(messageId: message.id, in: self.chatRoom.id)
             }
         })
-        
+
         // Показываем Alert
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let rootViewController = windowScene.windows.first?.rootViewController {
