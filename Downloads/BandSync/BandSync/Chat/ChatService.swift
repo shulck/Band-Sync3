@@ -1,72 +1,138 @@
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth
-import Combine
 
 class ChatService: ObservableObject {
-    @Published var messages: [ChatMessage] = []
     @Published var chatRooms: [ChatRoom] = []
-    @Published var isLoading = false
-    @Published var errorMessage = ""
-    @Published var hasMoreMessages = false
+    @Published var messages: [ChatMessage] = []
+    @Published var isLoading: Bool = false
+    @Published var errorMessage: String = ""
+    @Published var hasMoreMessages: Bool = false
 
     private let db = Firestore.firestore()
-    private var messagesListener: ListenerRegistration?
     private var chatRoomsListener: ListenerRegistration?
+    private var messagesListener: ListenerRegistration?
     private var lastMessage: QueryDocumentSnapshot?
-
     private let messagesPerPage = 20
 
+    // Текущий пользователь
     var currentUserId: String? {
         return Auth.auth().currentUser?.uid
     }
 
     var currentUserName: String {
-        return Auth.auth().currentUser?.displayName ?? "User"
+        return Auth.auth().currentUser?.displayName ?? "Member"
     }
 
-    func fetchMessages(for chatRoomId: String) {
+    // Получение списка чатов для текущего пользователя
+    func fetchChatRooms() {
+        guard let userId = currentUserId else {
+            print("⛔️ Failed to get user ID")
+            errorMessage = "Не удалось получить ID пользователя"
+            return
+        }
+
         isLoading = true
-        messagesListener?.remove()
+        print("🔄 Loading chats for user: \(userId)")
 
-        print("Setting up messages listener for chat ID: \(chatRoomId)")
+        chatRoomsListener?.remove()
 
-        // Устанавливаем слушатель напрямую - более простой подход
-        messagesListener = db.collection("chatRooms")
-            .document(chatRoomId)
-            .collection("messages")
-            .order(by: "timestamp", descending: false)
+        chatRoomsListener = db.collection("chatRooms")
+            .whereField("participants", arrayContains: userId)
             .addSnapshotListener { [weak self] querySnapshot, error in
                 guard let self = self else { return }
                 self.isLoading = false
 
                 if let error = error {
-                    print("❌ Error loading messages: \(error.localizedDescription)")
-                    self.errorMessage = "Error loading messages: \(error.localizedDescription)"
+                    print("⛔️ Error getting chats: \(error.localizedDescription)")
+                    self.errorMessage = "Ошибка загрузки чатов: \(error.localizedDescription)"
                     return
                 }
 
-                // Для отладки
-                print("📩 Received message snapshot - count: \(querySnapshot?.documents.count ?? 0)")
+                print("✅ Received chats: \(querySnapshot?.documents.count ?? 0)")
 
-                let allMessages = querySnapshot?.documents.compactMap { document -> ChatMessage? in
-                    let message = ChatMessage(document: document)
-                    if message != nil {
-                        print("✅ Message loaded: \(message!.text) from \(message!.senderName)")
-                    } else {
-                        print("❌ Failed to parse message from document: \(document.documentID)")
-                    }
-                    return message
+                self.chatRooms = querySnapshot?.documents.compactMap { document -> ChatRoom? in
+                    let chatRoom = ChatRoom(document: document)
+                    print("📝 Chat: \(chatRoom?.name ?? "no name") with \(chatRoom?.participants.count ?? 0) participants")
+                    return chatRoom
                 } ?? []
 
-                // Сортируем и обновляем UI
-                self.messages = allMessages.sorted { $0.timestamp < $1.timestamp }
-                self.hasMoreMessages = allMessages.count >= self.messagesPerPage
-
-                print("🔄 Updated messages array - new count: \(self.messages.count)")
+                print("🏁 Total chats loaded: \(self.chatRooms.count)")
             }
     }
 
+    // Получение сообщений для конкретного чата
+    func fetchMessages(for chatRoomId: String) {
+        guard let userId = currentUserId else {
+            self.errorMessage = "Не удалось получить ID пользователя"
+            return
+        }
+        
+        // Проверяем, входит ли пользователь в чат
+        db.collection("chatRooms").document(chatRoomId).getDocument { [weak self] document, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("⛔️ Error checking chat access: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка доступа к чату: \(error.localizedDescription)"
+                return
+            }
+            
+            guard let document = document,
+                  let data = document.data(),
+                  let participants = data["participants"] as? [String],
+                  participants.contains(userId) else {
+                self.errorMessage = "У вас нет доступа к этому чату"
+                return
+            }
+            
+            // Продолжаем загрузку сообщений, так как у пользователя есть доступ
+            self.isLoading = true
+            self.errorMessage = ""
+            self.messagesListener?.remove()
+
+            self.messagesListener = self.db.collection("chatRooms")
+                .document(chatRoomId)
+                .collection("messages")
+                .order(by: "timestamp", descending: false) // Изменено на ascending для правильного порядка
+                .limit(to: self.messagesPerPage) // Используем обычный limit
+                .addSnapshotListener { [weak self] (querySnapshot: QuerySnapshot?, error: Error?) in
+                    guard let self = self else { return }
+                    self.isLoading = false
+
+                    if let error = error {
+                        print("⛔️ Error getting messages: \(error.localizedDescription)")
+                        self.errorMessage = "Ошибка загрузки сообщений: \(error.localizedDescription)"
+                        return
+                    }
+
+                    self.hasMoreMessages = (querySnapshot?.documents.count ?? 0) >= self.messagesPerPage
+
+                    if let documents = querySnapshot?.documents, !documents.isEmpty {
+                        self.lastMessage = documents.first // Первое сообщение для pagination
+
+                        // Логирование для отладки
+                        print("📩 Received \(documents.count) messages for chat \(chatRoomId)")
+                        
+                        self.messages = documents.compactMap { document -> ChatMessage? in
+                            let message = ChatMessage(document: document)
+                            print("📄 Message from \(message?.senderName ?? "unknown"): \(message?.text ?? "empty")")
+                            return message
+                        }
+                        
+                        // Уже не нужно сортировать, так как запрос возвращает сообщения в правильном порядке
+                    } else {
+                        print("📩 No messages found for chat \(chatRoomId)")
+                        self.messages = []
+                    }
+
+                    // Отмечаем сообщения как прочитанные
+                    self.markMessagesAsRead(in: chatRoomId)
+                }
+        }
+    }
+
+    // Загрузка дополнительных сообщений (старых)
     func loadMoreMessages(for chatRoomId: String) {
         guard let lastMessage = self.lastMessage else {
             self.hasMoreMessages = false
@@ -78,251 +144,107 @@ class ChatService: ObservableObject {
         db.collection("chatRooms")
             .document(chatRoomId)
             .collection("messages")
-            .order(by: "timestamp", descending: true)
-            .start(afterDocument: lastMessage)
+            .order(by: "timestamp", descending: false)
             .limit(to: messagesPerPage)
+            .end(beforeDocument: lastMessage) // Загружаем сообщения перед самым старым
             .getDocuments { [weak self] snapshot, error in
                 guard let self = self else { return }
                 self.isLoading = false
 
                 if let error = error {
-                    self.errorMessage = "Error loading more messages: \(error.localizedDescription)"
+                    print("⛔️ Error loading more messages: \(error.localizedDescription)")
+                    self.errorMessage = "Ошибка загрузки сообщений: \(error.localizedDescription)"
                     return
                 }
 
-                guard let documents = snapshot?.documents, !documents.isEmpty else {
-                    self.hasMoreMessages = false
-                    return
-                }
+                if let documents = snapshot?.documents, !documents.isEmpty {
+                    self.lastMessage = documents.first
 
-                self.lastMessage = documents.last
-
-                let olderMessages = documents.compactMap { ChatMessage(document: $0) }
-                    .sorted { $0.timestamp < $1.timestamp }
-
-                self.messages.insert(contentsOf: olderMessages, at: 0)
-                self.hasMoreMessages = documents.count >= self.messagesPerPage
-            }
-    }
-
-    func sendMessage(text: String, in chatRoomId: String) {
-        guard let currentUserId = currentUserId,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("🔵 Attempting to send message: \"\(trimmedText)\" to chat: \(chatRoomId)")
-
-        let newMessageId = UUID().uuidString
-
-        // Создаем временное сообщение для локального отображения
-        let tempMessage = ChatMessage(
-            id: newMessageId,
-            senderId: currentUserId,
-            senderName: currentUserName,
-            text: trimmedText,
-            timestamp: Date(),
-            isRead: false,
-            status: .sending
-        )
-
-        // Добавляем сообщение локально
-        DispatchQueue.main.async {
-            self.messages.append(tempMessage)
-            print("➕ Added temporary message to local array: \(newMessageId)")
-        }
-
-        // Подготавливаем данные для Firebase
-        let messageData: [String: Any] = [
-            "senderId": currentUserId,
-            "senderName": currentUserName,
-            "text": trimmedText,
-            "timestamp": FieldValue.serverTimestamp(),
-            "isRead": false,
-            "status": MessageStatus.sent.rawValue
-        ]
-
-        // Отправка в Firebase
-        let messageRef = db.collection("chatRooms")
-            .document(chatRoomId)
-            .collection("messages")
-            .document(newMessageId)
-
-        print("🔹 Sending message to Firebase: \(newMessageId)")
-
-        messageRef.setData(messageData) { [weak self] error in
-            guard let self = self else { return }
-
-            if let error = error {
-                print("❌ Error sending message: \(error.localizedDescription)")
-
-                // Обновляем статус локального сообщения при ошибке
-                DispatchQueue.main.async {
-                    if let index = self.messages.firstIndex(where: { $0.id == newMessageId }) {
-                        self.messages[index].status = .failed
-                        print("⚠️ Updated message status to failed: \(newMessageId)")
+                    let oldMessages = documents.compactMap { document -> ChatMessage? in
+                        return ChatMessage(document: document)
                     }
-                }
-            } else {
-                print("✅ Message sent successfully: \(newMessageId)")
 
-                // Обновляем статус локального сообщения при успехе
-                DispatchQueue.main.async {
-                    if let index = self.messages.firstIndex(where: { $0.id == newMessageId }) {
-                        self.messages[index].status = .sent
-                        print("✓ Updated message status to sent: \(newMessageId)")
+                    // Добавляем старые сообщения в начало списка
+                    DispatchQueue.main.async {
+                        self.messages = oldMessages + self.messages
                     }
-                }
 
-                // Обновляем информацию о последнем сообщении в чате
-                self.updateChatLastMessage(chatRoomId: chatRoomId, text: trimmedText, messageId: newMessageId)
-            }
-        }
-    }
-
-    // Новый метод для проверки существования чата
-    private func checkChatExists(_ chatRoomId: String, completion: @escaping (Bool) -> Void) {
-        let chatRef = db.collection("chatRooms").document(chatRoomId)
-
-        chatRef.getDocument { [weak self] document, error in
-            guard let self = self else {
-                completion(false)
-                return
-            }
-
-            if let error = error {
-                print("Error checking chat: \(error.localizedDescription)")
-                completion(false)
-                return
-            }
-
-            if let document = document, document.exists {
-                // Проверяем, является ли текущий пользователь участником
-                if let data = document.data(),
-                   let participants = data["participants"] as? [String],
-                   let currentUserId = self.currentUserId,
-                   participants.contains(currentUserId) {
-                    completion(true)
+                    // Есть ли ещё сообщения для загрузки
+                    self.hasMoreMessages = documents.count >= self.messagesPerPage
                 } else {
-                    // Пользователь не в списке участников
-                    print("User is not a participant of this chat")
-                    completion(false)
+                    self.hasMoreMessages = false
                 }
-            } else {
-                // Чат не существует
-                print("Chat does not exist")
-                completion(false)
             }
-        }
     }
 
-    // Обновляем метод для использования серверного времени
-    private func updateLastMessageWithServerTime(text: String, in chatRoomId: String, messageId: String) {
-        let chatRef = db.collection("chatRooms").document(chatRoomId)
-
-        let updateData: [String: Any] = [
-            "lastMessage": text,
-            "lastMessageDate": FieldValue.serverTimestamp(),
-            "lastMessageId": messageId,
-            "lastMessageSender": currentUserId ?? ""
-        ]
-
-        chatRef.updateData(updateData) { error in
-            if let error = error {
-                print("Error updating last message: \(error.localizedDescription)")
-            } else {
-                print("Last message updated successfully")
-            }
-        }
-    }
-
-    func resendMessage(_ message: ChatMessage, in chatRoomId: String) {
-        guard message.status == .failed else { return }
-
-        let messageRef = db.collection("chatRooms")
-            .document(chatRoomId)
-            .collection("messages")
-            .document(message.id)
-
-        var updatedMessage = message
-        updatedMessage.status = .sending
-
-        if let index = messages.firstIndex(where: { $0.id == message.id }) {
-            messages[index] = updatedMessage
-        }
-
-        let messageData: [String: Any] = [
-            "senderId": message.senderId,
-            "senderName": message.senderName,
-            "text": message.text,
-            "timestamp": FieldValue.serverTimestamp(),
-            "isRead": false,
-            "status": MessageStatus.sending.rawValue
-        ]
-
-        messageRef.setData(messageData) { [weak self] error in
+    // Отправка нового сообщения
+    func sendMessage(text: String, in chatRoomId: String) {
+        guard let userId = currentUserId, !text.isEmpty else { return }
+        
+        // Проверка наличия пользователя в чате
+        db.collection("chatRooms").document(chatRoomId).getDocument { [weak self] document, error in
             guard let self = self else { return }
-
+            
             if let error = error {
-                print("Error resending message: \(error.localizedDescription)")
-
-                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
-                    self.messages[index].status = .failed
-                }
-            } else {
-                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
-                    self.messages[index].status = .sent
-                }
-
-                self.updateLastMessage(text: message.text, in: chatRoomId)
+                print("⛔️ Error checking chat access: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка доступа к чату: \(error.localizedDescription)"
+                return
             }
-        }
-    }
+            
+            guard let document = document,
+                  let data = document.data(),
+                  let participants = data["participants"] as? [String],
+                  participants.contains(userId) else {
+                self.errorMessage = "Вы не можете отправить сообщение в этот чат"
+                return
+            }
+            
+            // Создаем сообщение со статусом "отправляется"
+            let newMessageId = UUID().uuidString
+            let message = ChatMessage(
+                id: newMessageId,
+                senderId: userId,
+                senderName: self.currentUserName,
+                text: text,
+                timestamp: Date(),
+                isRead: false,
+                status: .sending
+            )
 
-    func editMessage(messageId: String, in chatRoomId: String, newText: String) {
-        guard let currentUserId = currentUserId,
-              !newText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            // Добавляем сообщение локально с временным ID
+            DispatchQueue.main.async {
+                self.messages.append(message)
+            }
 
-        let messageRef = db.collection("chatRooms")
-            .document(chatRoomId)
-            .collection("messages")
-            .document(messageId)
+            // Добавляем сообщение в коллекцию
+            let messageRef = self.db.collection("chatRooms")
+                .document(chatRoomId)
+                .collection("messages")
+                .document(newMessageId)
 
-        // Обновляем сообщение локально
-        if let index = messages.firstIndex(where: { $0.id == messageId }) {
-            messages[index].text = newText
-            messages[index].status = .edited
-        }
+            messageRef.setData(message.asDict) { [weak self] error in
+                guard let self = self else { return }
 
-        messageRef.updateData([
-            "text": newText,
-            "status": MessageStatus.edited.rawValue,
-            "editedAt": FieldValue.serverTimestamp()
-        ]) { [weak self] error in
-            guard let self = self else { return }
+                if let error = error {
+                    print("⛔️ Error sending message: \(error.localizedDescription)")
+                    self.errorMessage = "Ошибка отправки сообщения: \(error.localizedDescription)"
 
-            if let error = error {
-                print("Error editing message: \(error.localizedDescription)")
-                // Восстанавливаем оригинальное сообщение при ошибке
-                self.fetchMessages(for: chatRoomId)
-            } else {
-                // Обновляем последнее сообщение в чате если оно было отредактировано
-                messageRef.getDocument { (document, _) in
-                    if let document = document, document.exists,
-                       let data = document.data(),
-                       let timestamp = (data["timestamp"] as? Timestamp)?.dateValue() {
+                    // Обновляем статус сообщения на "ошибка"
+                    if let index = self.messages.firstIndex(where: { $0.id == newMessageId }) {
+                        DispatchQueue.main.async {
+                            self.messages[index].status = .failed
+                        }
+                    }
+                } else {
+                    print("✅ Message sent successfully: \(newMessageId)")
+                    
+                    // Обновляем информацию о последнем сообщении в чате
+                    self.updateLastMessage(text: text, in: chatRoomId)
 
-                        // Получаем последнее сообщение чата для сравнения
-                        let chatRef = self.db.collection("chatRooms").document(chatRoomId)
-                        chatRef.getDocument { (chatDoc, _) in
-                            if let chatDoc = chatDoc, chatDoc.exists,
-                               let chatData = chatDoc.data(),
-                               let lastMessageDate = (chatData["lastMessageDate"] as? Timestamp)?.dateValue() {
-
-                                // Если это последнее сообщение, обновляем его в информации о чате
-                                if abs(timestamp.timeIntervalSince(lastMessageDate)) < 1 {
-                                    self.updateLastMessage(text: newText, in: chatRoomId)
-                                }
-                            }
+                    // Обновляем статус сообщения на "отправлено"
+                    if let index = self.messages.firstIndex(where: { $0.id == newMessageId }) {
+                        DispatchQueue.main.async {
+                            self.messages[index].status = .sent
                         }
                     }
                 }
@@ -330,22 +252,203 @@ class ChatService: ObservableObject {
         }
     }
 
-    private func updateLastMessage(text: String, in chatRoomId: String) {
-        let chatRef = db.collection("chatRooms").document(chatRoomId)
+    // Повторная отправка сообщения при ошибке
+    func resendMessage(_ message: ChatMessage, in chatRoomId: String) {
+        guard message.status == .failed else { return }
 
-        chatRef.updateData([
-            "lastMessage": text,
-            "lastMessageDate": FieldValue.serverTimestamp()
-        ]) { error in
+        // Обновляем статус сообщения на "отправляется"
+        if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
+            DispatchQueue.main.async {
+                self.messages[index].status = .sending
+            }
+        }
+
+        // Отправляем сообщение снова
+        let messageRef = db.collection("chatRooms")
+            .document(chatRoomId)
+            .collection("messages")
+            .document(message.id)
+
+        messageRef.setData(message.asDict) { [weak self] error in
+            guard let self = self else { return }
+
             if let error = error {
-                print("Error updating last message: \(error.localizedDescription)")
+                print("⛔️ Error resending message: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка отправки сообщения: \(error.localizedDescription)"
+
+                // Обновляем статус сообщения на "ошибка"
+                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
+                    DispatchQueue.main.async {
+                        self.messages[index].status = .failed
+                    }
+                }
+            } else {
+                // Обновляем информацию о последнем сообщении в чате
+                self.updateLastMessage(text: message.text, in: chatRoomId)
+
+                // Обновляем статус сообщения на "отправлено"
+                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
+                    DispatchQueue.main.async {
+                        self.messages[index].status = .sent
+                    }
+                }
             }
         }
     }
 
-    func deleteMessage(messageId: String, in chatRoomId: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+    // Обновление информации о последнем сообщении
+    private func updateLastMessage(text: String, in chatRoomId: String) {
+        let chatRef = db.collection("chatRooms").document(chatRoomId)
 
+        let currentTime = Date()
+        chatRef.updateData([
+            "lastMessage": text,
+            "lastMessageDate": Timestamp(date: currentTime)
+        ]) { error in
+            if let error = error {
+                print("⛔️ Error updating last message: \(error.localizedDescription)")
+            } else {
+                print("✅ Last message updated in chat: \(chatRoomId)")
+            }
+        }
+    }
+
+    // Создание нового чата
+    func createChat(name: String, participants: [String], isGroupChat: Bool = false) {
+        guard let userId = currentUserId else {
+            print("⛔️ Failed to get user ID for chat creation")
+            errorMessage = "Не удалось получить ID пользователя"
+            return
+        }
+
+        isLoading = true
+
+        // Убеждаемся, что текущий пользователь включен в участников
+        var allParticipants = participants
+        if !allParticipants.contains(userId) {
+            allParticipants.append(userId)
+        }
+
+        print("🔄 Creating chat: \(name) with \(allParticipants.count) participants")
+
+        let chatId = UUID().uuidString
+        let chatRoom = ChatRoom(
+            id: chatId,
+            name: name,
+            participants: allParticipants,
+            lastMessageDate: Date(),
+            isGroupChat: isGroupChat
+        )
+
+        let newChatRef = db.collection("chatRooms").document(chatId)
+
+        newChatRef.setData(chatRoom.asDict) { [weak self] error in
+            guard let self = self else { return }
+            self.isLoading = false
+
+            if let error = error {
+                print("⛔️ Error creating chat: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка создания чата: \(error.localizedDescription)"
+            } else {
+                print("✅ Chat successfully created, ID: \(chatId)")
+                
+                // Добавляем системное сообщение
+                let welcomeMessage = "Чат создан"
+                self.addSystemMessage(chatId: chatId, text: welcomeMessage)
+
+                // Обновляем список чатов
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.fetchChatRooms()
+                }
+            }
+        }
+    }
+    
+    // Добавление системного сообщения
+    private func addSystemMessage(chatId: String, text: String) {
+        let systemMessageId = UUID().uuidString
+        let systemMessage: [String: Any] = [
+            "senderId": "system",
+            "senderName": "System",
+            "text": text,
+            "timestamp": Timestamp(date: Date()),
+            "isRead": true,
+            "status": MessageStatus.sent.rawValue
+        ]
+        
+        db.collection("chatRooms")
+            .document(chatId)
+            .collection("messages")
+            .document(systemMessageId)
+            .setData(systemMessage) { error in
+                if let error = error {
+                    print("⛔️ Error adding system message: \(error.localizedDescription)")
+                } else {
+                    print("✅ System message added to chat: \(chatId)")
+                }
+            }
+    }
+
+    // Редактирование сообщения
+    func editMessage(messageId: String, in chatRoomId: String, newText: String) {
+        guard let userId = currentUserId else {
+            errorMessage = "Не удалось получить ID пользователя"
+            return
+        }
+
+        // Находим сообщение в локальном массиве
+        guard let index = messages.firstIndex(where: { $0.id == messageId && $0.senderId == userId }) else {
+            errorMessage = "Сообщение не найдено или вы не имеете прав на его редактирование"
+            return
+        }
+
+        // Обновляем сообщение в Firebase
+        let messageRef = db.collection("chatRooms")
+            .document(chatRoomId)
+            .collection("messages")
+            .document(messageId)
+
+        messageRef.updateData([
+            "text": newText,
+            "status": MessageStatus.edited.rawValue
+        ]) { [weak self] error in
+            guard let self = self else { return }
+
+            if let error = error {
+                print("⛔️ Error editing message: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка редактирования сообщения: \(error.localizedDescription)"
+            } else {
+                // Обновляем локальное сообщение
+                DispatchQueue.main.async {
+                    self.messages[index].text = newText
+                    self.messages[index].status = .edited
+                }
+
+                // Обновляем последнее сообщение в чате, если это последнее сообщение
+                if index == self.messages.count - 1 {
+                    self.updateLastMessage(text: newText, in: chatRoomId)
+                }
+            }
+        }
+    }
+
+    // Удаление сообщения
+    func deleteMessage(messageId: String, in chatRoomId: String) {
+        guard let userId = currentUserId else {
+            errorMessage = "Не удалось получить ID пользователя"
+            return
+        }
+
+        // Находим сообщение в локальном массиве
+        guard let index = messages.firstIndex(where: { $0.id == messageId && $0.senderId == userId }) else {
+            errorMessage = "Сообщение не найдено или вы не имеете прав на его удаление"
+            return
+        }
+
+        // Проверяем, является ли сообщение последним перед удалением
+        let isLastMessage = index == messages.count - 1
+
+        // Удаляем сообщение из Firebase
         let messageRef = db.collection("chatRooms")
             .document(chatRoomId)
             .collection("messages")
@@ -355,46 +458,67 @@ class ChatService: ObservableObject {
             guard let self = self else { return }
 
             if let error = error {
-                print("Error deleting message: \(error.localizedDescription)")
+                print("⛔️ Error deleting message: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка удаления сообщения: \(error.localizedDescription)"
             } else {
-                self.messages.remove(at: index)
+                // Удаляем локальное сообщение
+                DispatchQueue.main.async {
+                    self.messages.remove(at: index)
+
+                    // Обновляем последнее сообщение в чате, если удалили последнее
+                    if isLastMessage {
+                        self.updateLastMessageAfterDeletion(in: chatRoomId)
+                    }
+                }
             }
         }
     }
 
-    func stopListening() {
-        messagesListener?.remove()
-        chatRoomsListener?.remove()
-    }
+    // Вспомогательный метод для обновления последнего сообщения после удаления
+    private func updateLastMessageAfterDeletion(in chatRoomId: String) {
+        // Проверяем, есть ли еще сообщения локально
+        if let lastMessage = messages.last {
+            // Если есть другие сообщения, используем последнее
+            updateLastMessage(text: lastMessage.text, in: chatRoomId)
+            return
+        }
 
-    deinit {
-        stopListening()
-    }
-
-    func fetchChatRooms() {
-        guard let userId = currentUserId else { return }
-
-        chatRoomsListener?.remove()
-
-        chatRoomsListener = db.collection("chatRooms")
-            .whereField("participants", arrayContains: userId)
-            .order(by: "lastMessageDate", descending: true)
-            .addSnapshotListener { [weak self] querySnapshot, error in
+        // Если локальных сообщений нет, проверяем на сервере
+        db.collection("chatRooms")
+            .document(chatRoomId)
+            .collection("messages")
+            .order(by: "timestamp", descending: true)
+            .limit(to: 1)
+            .getDocuments { [weak self] snapshot, error in
                 guard let self = self else { return }
 
                 if let error = error {
-                    print("Error getting chats: \(error.localizedDescription)")
+                    print("⛔️ Ошибка поиска последнего сообщения: \(error.localizedDescription)")
                     return
                 }
 
-                self.chatRooms = querySnapshot?.documents.compactMap {
-                    ChatRoom(document: $0)
-                } ?? []
+                if let document = snapshot?.documents.first,
+                   let lastMessage = ChatMessage(document: document) {
+                    // Обновляем информацию о последнем сообщении
+                    let chatRef = self.db.collection("chatRooms").document(chatRoomId)
+                    chatRef.updateData([
+                        "lastMessage": lastMessage.text,
+                        "lastMessageDate": Timestamp(date: lastMessage.timestamp)
+                    ])
+                } else {
+                    // Если сообщений больше нет, очищаем информацию о последнем сообщении
+                    let chatRef = self.db.collection("chatRooms").document(chatRoomId)
+                    chatRef.updateData([
+                        "lastMessage": FieldValue.delete(),
+                        "lastMessageDate": FieldValue.delete()
+                    ])
+                }
             }
     }
 
+    // Получение количества непрочитанных сообщений
     func getUnreadMessagesCount(in chatRoomId: String, completion: @escaping (Int) -> Void) {
-        guard let currentUserId = currentUserId else {
+        guard let userId = currentUserId else {
             completion(0)
             return
         }
@@ -402,73 +526,245 @@ class ChatService: ObservableObject {
         db.collection("chatRooms")
             .document(chatRoomId)
             .collection("messages")
+            .whereField("senderId", isNotEqualTo: userId)
             .whereField("isRead", isEqualTo: false)
-            .whereField("senderId", isNotEqualTo: currentUserId)
             .getDocuments { snapshot, error in
                 if let error = error {
-                    print("Error getting unread messages: \(error.localizedDescription)")
+                    print("⛔️ Error getting unread messages: \(error.localizedDescription)")
                     completion(0)
                     return
                 }
 
-                completion(snapshot?.documents.count ?? 0)
+                let count = snapshot?.documents.count ?? 0
+                print("📊 Unread messages in chat \(chatRoomId): \(count)")
+                completion(count)
             }
     }
 
-    func deleteChat(chatId: String, completion: @escaping (Bool) -> Void) {
-        let chatRef = db.collection("chatRooms").document(chatId)
+    // Отметка сообщений как прочитанных
+    private func markMessagesAsRead(in chatRoomId: String) {
+        guard let userId = currentUserId else { return }
 
-        // Сначала удаляем все сообщения чата
-        chatRef.collection("messages").getDocuments { [weak self] snapshot, error in
-            guard let self = self else {
-                completion(false)
-                return
-            }
+        // Находим непрочитанные сообщения от других пользователей
+        let unreadMessages = messages.filter {
+            $0.senderId != userId && !$0.isRead
+        }
+
+        for message in unreadMessages {
+            print("📖 Marking message as read: \(message.id)")
+            
+            db.collection("chatRooms")
+                .document(chatRoomId)
+                .collection("messages")
+                .document(message.id)
+                .updateData(["isRead": true]) { error in
+                    if let error = error {
+                        print("⛔️ Error marking message as read: \(error.localizedDescription)")
+                    } else {
+                        print("✅ Message marked as read: \(message.id)")
+                    }
+                }
+        }
+    }
+
+    // Отмена подписок при выходе из чата
+    func stopListening() {
+        print("🛑 Stopping chat listeners")
+        chatRoomsListener?.remove()
+        messagesListener?.remove()
+    }
+
+    // Удаление чата
+    func deleteChat(chatId: String, completion: @escaping (Bool) -> Void) {
+        guard let userId = currentUserId else {
+            errorMessage = "Не удалось получить ID пользователя"
+            completion(false)
+            return
+        }
+
+        isLoading = true
+
+        // Проверяем, есть ли у пользователя доступ к этому чату
+        db.collection("chatRooms").document(chatId).getDocument { [weak self] snapshot, error in
+            guard let self = self else { return }
 
             if let error = error {
-                print("Error fetching messages to delete: \(error.localizedDescription)")
+                self.isLoading = false
+                self.errorMessage = "Ошибка доступа к чату: \(error.localizedDescription)"
                 completion(false)
                 return
             }
 
-            let batch = self.db.batch()
-
-            // Добавляем все сообщения к удалению в batch
-            snapshot?.documents.forEach { doc in
-                batch.deleteDocument(doc.reference)
+            guard let data = snapshot?.data(),
+                  let participants = data["participants"] as? [String],
+                  participants.contains(userId) else {
+                self.isLoading = false
+                self.errorMessage = "У вас нет прав на удаление этого чата"
+                completion(false)
+                return
             }
 
-            // Удаляем сам чат после удаления всех сообщений
-            batch.deleteDocument(chatRef)
+            // Сначала удаляем все сообщения в чате
+            let messagesRef = self.db.collection("chatRooms").document(chatId).collection("messages")
 
-            // Выполняем batch-операцию
-            batch.commit { error in
+            messagesRef.getDocuments { [weak self] (snapshot, error) in
+                guard let self = self else { return }
+
                 if let error = error {
-                    print("Error deleting chat: \(error.localizedDescription)")
+                    self.isLoading = false
+                    self.errorMessage = "Ошибка удаления сообщений чата: \(error.localizedDescription)"
                     completion(false)
-                } else {
-                    completion(true)
+                    return
+                }
+
+                // Если в чате нет сообщений, удаляем сам чат
+                if snapshot?.documents.isEmpty ?? true {
+                    self.deleteChatDocument(chatId: chatId, completion: completion)
+                    return
+                }
+
+                // Создаем группу для отслеживания завершения удаления всех сообщений
+                let group = DispatchGroup()
+                var hasError = false
+
+                // Удаляем каждое сообщение
+                for document in snapshot?.documents ?? [] {
+                    group.enter()
+                    messagesRef.document(document.documentID).delete { error in
+                        if let error = error {
+                            print("⛔️ Ошибка удаления сообщения: \(error.localizedDescription)")
+                            hasError = true
+                        }
+                        group.leave()
+                    }
+                }
+
+                // После удаления всех сообщений удаляем сам чат
+                group.notify(queue: .main) {
+                    if hasError {
+                        self.isLoading = false
+                        self.errorMessage = "Возникли ошибки при удалении сообщений"
+                        completion(false)
+                    } else {
+                        self.deleteChatDocument(chatId: chatId, completion: completion)
+                    }
                 }
             }
         }
     }
 
-    // Упрощенная версия обновления информации о чате
-    private func updateChatLastMessage(chatRoomId: String, text: String, messageId: String) {
-        let chatRef = db.collection("chatRooms").document(chatRoomId)
+    // Вспомогательный метод для удаления документа чата
+    private func deleteChatDocument(chatId: String, completion: @escaping (Bool) -> Void) {
+        db.collection("chatRooms").document(chatId).delete { [weak self] error in
+            guard let self = self else { return }
+            self.isLoading = false
 
-        print("🔄 Updating chat lastMessage info for chat: \(chatRoomId)")
-
-        chatRef.updateData([
-            "lastMessage": text,
-            "lastMessageDate": FieldValue.serverTimestamp(),
-            "lastMessageId": messageId,
-            "lastMessageSender": currentUserId ?? ""
-        ]) { error in
             if let error = error {
-                print("❌ Error updating chat info: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка удаления чата: \(error.localizedDescription)"
+                print("⛔️ Ошибка удаления чата: \(error.localizedDescription)")
+                completion(false)
             } else {
-                print("✅ Chat info updated successfully")
+                print("✅ Чат успешно удален")
+                // Обновим локальный список
+                self.chatRooms.removeAll { $0.id == chatId }
+                completion(true)
+            }
+        }
+    }
+
+    // Редактирование чата
+    func editChat(chatId: String, newName: String, completion: @escaping (Bool) -> Void) {
+        guard let userId = currentUserId else {
+            errorMessage = "Не удалось получить ID пользователя"
+            DispatchQueue.main.async {
+                completion(false)
+            }
+            return
+        }
+
+        isLoading = true
+
+        // Проверяем, есть ли у пользователя доступ к этому чату
+        db.collection("chatRooms").document(chatId).getDocument { [weak self] snapshot, error in
+            guard let self = self else {
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+                return
+            }
+
+            if let error = error {
+                self.isLoading = false
+                self.errorMessage = "Ошибка доступа к чату: \(error.localizedDescription)"
+                print("⛔️ Ошибка доступа к чату: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+                return
+            }
+
+            guard let data = snapshot?.data(),
+                  let participants = data["participants"] as? [String],
+                  participants.contains(userId),
+                  let isGroupChat = data["isGroupChat"] as? Bool else {
+                self.isLoading = false
+                self.errorMessage = "У вас нет прав на редактирование этого чата"
+                print("⛔️ У пользователя нет прав редактировать чат")
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+                return
+            }
+
+            // Можно редактировать только групповые чаты
+            if !isGroupChat {
+                self.isLoading = false
+                self.errorMessage = "Нельзя изменить название личного чата"
+                print("⛔️ Попытка редактирования личного чата")
+                DispatchQueue.main.async {
+                    completion(false)
+                }
+                return
+            }
+
+            // Обновляем название чата
+            let chatRef = self.db.collection("chatRooms").document(chatId)
+
+            chatRef.updateData([
+                "name": newName
+            ]) { [weak self] error in
+                guard let self = self else {
+                    DispatchQueue.main.async {
+                        completion(false)
+                    }
+                    return
+                }
+                self.isLoading = false
+
+                if let error = error {
+                    self.errorMessage = "Ошибка обновления чата: \(error.localizedDescription)"
+                    print("⛔️ Ошибка обновления чата: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        completion(false)
+                    }
+                } else {
+                    print("✅ Чат успешно обновлен")
+                    
+                    // Добавляем системное сообщение о переименовании
+                    self.addSystemMessage(chatId: chatId, text: "Чат переименован на '\(newName)'")
+                    
+                    // Обновляем локальный список
+                    if let index = self.chatRooms.firstIndex(where: { $0.id == chatId }) {
+                        DispatchQueue.main.async {
+                            self.chatRooms[index].name = newName
+                            completion(true)
+                        }
+                    } else {
+                        DispatchQueue.main.async {
+                            completion(true)
+                        }
+                    }
+                }
             }
         }
     }

@@ -12,7 +12,7 @@ struct ChatView: View {
     @State private var scrollToBottom = true
     @State private var editingMessage: ChatMessage?
     // Важно: перемещаем переменную высоты поля сюда - на уровень структуры
-    @State private var textFieldHeight: CGFloat = 36
+    @State private var textFieldHeight: CGFloat = 32
 
     private var isCurrentUserInChat: Bool {
         guard let currentUserId = chatService.currentUserId else { return false }
@@ -102,7 +102,7 @@ struct ChatView: View {
                         // Текстовое поле с правильным связыванием высоты
                         AutoGrowingTextField(
                             text: $messageText,
-                            minHeight: 36,
+                            minHeight: 32,
                             maxHeight: 120,
                             height: $textFieldHeight
                         )
@@ -124,7 +124,7 @@ struct ChatView: View {
                         }
                         .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .padding(8)
+                    .padding(6)
 
                     // Панель эмодзи
                     if showEmojiPicker {
@@ -157,15 +157,15 @@ struct ChatView: View {
                     }
                 }
             }
-
-            // Кнопка автоскролла
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { scrollToBottom.toggle() }) {
-                    Image(systemName: scrollToBottom
-                        ? "arrow.down.to.line.compact"
-                        : "arrow.up.to.line.compact")
-                }
-            }
+            
+            // Убираем кнопку автоскролла со стрелкой
+            // ToolbarItem(placement: .navigationBarTrailing) {
+            //     Button(action: { scrollToBottom.toggle() }) {
+            //         Image(systemName: scrollToBottom
+            //             ? "arrow.down.to.line.compact"
+            //             : "arrow.up.to.line.compact")
+            //     }
+            // }
         }
         .sheet(isPresented: $showingParticipants) {
             ParticipantsView(participants: chatRoom.participants)
