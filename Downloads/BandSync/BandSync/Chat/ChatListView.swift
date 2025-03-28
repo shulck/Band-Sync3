@@ -9,6 +9,7 @@ struct ChatListView: View {
     @State private var showDeleteAlert = false
     @State private var chatToDelete: ChatRoom?
     @State private var chatToEdit: ChatRoom?
+    @State private var showEditNameAlert = false
     @State private var editChatName = ""
 
     // Упрощённая версия фильтрации
@@ -132,6 +133,7 @@ struct ChatListView: View {
                                     Button(action: {
                                         chatToEdit = chatRoom
                                         editChatName = chatRoom.name
+                                        showEditNameAlert = true
                                     }) {
                                         Label("Редактировать", systemImage: "pencil")
                                     }
@@ -156,6 +158,7 @@ struct ChatListView: View {
                                     Button {
                                         chatToEdit = chatRoom
                                         editChatName = chatRoom.name
+                                        showEditNameAlert = true
                                     } label: {
                                         Label("Изменить", systemImage: "pencil")
                                     }
@@ -197,9 +200,21 @@ struct ChatListView: View {
             } message: {
                 Text("Вы уверены, что хотите удалить чат? Это действие невозможно отменить.")
             }
-            .sheet(item: $chatToEdit) { chatRoom in
-                // Исправленный вызов - используем существующий ChatRoom
-                ChatView(chatRoom: chatRoom)
+            // Заменяем sheet на alert для редактирования названия чата
+            .alert("Переименовать чат", isPresented: $showEditNameAlert) {
+                TextField("Название чата", text: $editChatName)
+                Button("Отмена", role: .cancel) {}
+                Button("Сохранить") {
+                    if let chatToEdit = chatToEdit, !editChatName.isEmpty {
+                        chatService.editChat(chatId: chatToEdit.id, newName: editChatName) { success in
+                            if success {
+                                print("Чат успешно переименован")
+                            }
+                        }
+                    }
+                }
+            } message: {
+                Text("Введите новое название для чата")
             }
             .onAppear {
                 chatService.fetchChatRooms()

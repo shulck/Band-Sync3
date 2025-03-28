@@ -15,6 +15,38 @@ enum MessageStatus: String, Codable, Equatable {
     }
 }
 
+struct ReplyData: Codable, Equatable {
+    var messageId: String
+    var text: String
+    var senderName: String
+    var senderId: String
+    
+    var asDict: [String: Any] {
+        return [
+            "messageId": messageId,
+            "text": text,
+            "senderName": senderName,
+            "senderId": senderId
+        ]
+    }
+    
+    static func fromDict(_ dict: [String: Any]) -> ReplyData? {
+        guard let messageId = dict["messageId"] as? String,
+              let text = dict["text"] as? String,
+              let senderName = dict["senderName"] as? String,
+              let senderId = dict["senderId"] as? String else {
+            return nil
+        }
+        
+        return ReplyData(
+            messageId: messageId,
+            text: text,
+            senderName: senderName,
+            senderId: senderId
+        )
+    }
+}
+
 struct ChatMessage: Identifiable, Codable, Equatable {
     var id: String
     var senderId: String
@@ -23,13 +55,15 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     var timestamp: Date
     var isRead: Bool
     var status: MessageStatus
+    var replyTo: ReplyData?
     
     // Для сравнения сообщений
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         return lhs.id == rhs.id &&
                lhs.text == rhs.text &&
                lhs.isRead == rhs.isRead &&
-               lhs.status == rhs.status
+               lhs.status == rhs.status &&
+               lhs.replyTo?.messageId == rhs.replyTo?.messageId
     }
     
     // Для удобства работы с Firebase
@@ -42,6 +76,11 @@ struct ChatMessage: Identifiable, Codable, Equatable {
             "isRead": isRead,
             "status": status.rawValue
         ]
+        
+        // Добавляем данные об ответе, если есть
+        if let replyTo = replyTo {
+            dict["replyTo"] = replyTo.asDict
+        }
         
         // Убедимся, что все поля существуют и имеют правильный формат
         if dict["senderId"] == nil { dict["senderId"] = "" }
@@ -90,6 +129,12 @@ struct ChatMessage: Identifiable, Codable, Equatable {
             status = .sent
         }
         
+        // Данные об ответе на сообщение
+        var replyTo: ReplyData?
+        if let replyData = data["replyTo"] as? [String: Any] {
+            replyTo = ReplyData.fromDict(replyData)
+        }
+        
         self.id = document.documentID
         self.senderId = senderId
         self.senderName = senderName
@@ -97,6 +142,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         self.timestamp = timestamp
         self.isRead = isRead
         self.status = status
+        self.replyTo = replyTo
         
         print("✅ Successfully parsed message: \(id) from \(senderName)")
     }
@@ -108,7 +154,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
          text: String,
          timestamp: Date = Date(),
          isRead: Bool = false,
-         status: MessageStatus = .sent) {
+         status: MessageStatus = .sent,
+         replyTo: ReplyData? = nil) {
         self.id = id
         self.senderId = senderId
         self.senderName = senderName
@@ -116,6 +163,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         self.timestamp = timestamp
         self.isRead = isRead
         self.status = status
+        self.replyTo = replyTo
     }
     
     // Метод для создания копии с обновленным статусом
@@ -127,7 +175,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
             text: self.text,
             timestamp: self.timestamp,
             isRead: self.isRead,
-            status: newStatus
+            status: newStatus,
+            replyTo: self.replyTo
         )
     }
     
@@ -140,7 +189,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
             text: newText,
             timestamp: self.timestamp,
             isRead: self.isRead,
-            status: .edited
+            status: .edited,
+            replyTo: self.replyTo
         )
     }
     

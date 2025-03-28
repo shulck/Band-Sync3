@@ -160,21 +160,79 @@ struct ParticipantRow: View {
     let email: String
     let isCurrentUser: Bool
     
+    // Функция для генерации стабильного цвета на основе ID пользователя
+    private func colorForUser(userId: String) -> LinearGradient {
+        // Список пар цветов для градиентов
+        let colorPairs: [(Color, Color)] = [
+            (.blue, .blue.opacity(0.7)),
+            (.green, .green.opacity(0.7)),
+            (.orange, .orange.opacity(0.7)),
+            (.purple, .purple.opacity(0.7)),
+            (.pink, .pink.opacity(0.7)),
+            (.red, .red.opacity(0.7)),
+            (.yellow, .yellow.opacity(0.6)),
+            (.teal, .teal.opacity(0.7)),
+            (.indigo, .indigo.opacity(0.7)),
+            (.cyan, .cyan.opacity(0.7))
+        ]
+        
+        // Если это текущий пользователь, возвращаем зеленый градиент
+        if isCurrentUser {
+            return LinearGradient(
+                gradient: Gradient(colors: [.green.opacity(0.7), .green]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        
+        // Для остальных пользователей генерируем цвет по ID
+        var hash = 0
+        for char in userId {
+            hash = ((hash << 5) &- hash) &+ Int(char.asciiValue ?? 0)
+        }
+        
+        let absHash = abs(hash)
+        let colorIndex = absHash % colorPairs.count
+        let (color1, color2) = colorPairs[colorIndex]
+        
+        return LinearGradient(
+            gradient: Gradient(colors: [color1, color2]),
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    // Генерация инициалов пользователя (до 2 букв)
+    private func initialsForUser(name: String) -> String {
+        let components = name.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+        
+        if components.isEmpty {
+            return "?"
+        }
+        
+        if components.count == 1 {
+            // Одно слово - берем первую букву или первые две, если имя длинное
+            let name = components[0]
+            if name.count > 3 {
+                return String(name.prefix(2)).uppercased()
+            } else {
+                return String(name.prefix(1)).uppercased()
+            }
+        } else {
+            // Два слова - берем первые буквы каждого слова
+            let first = components[0].prefix(1)
+            let last = components[1].prefix(1)
+            return "\(first)\(last)".uppercased()
+        }
+    }
+    
     var body: some View {
         HStack(spacing: 14) {
             // Аватар участника
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                isCurrentUser ? Color.green.opacity(0.7) : Color.blue.opacity(0.7),
-                                isCurrentUser ? Color.green : Color.blue
-                            ]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(colorForUser(userId: participantId))
                     .frame(width: 40, height: 40)
                     .shadow(color: isCurrentUser ? Color.green.opacity(0.3) : Color.blue.opacity(0.3), radius: 2, x: 0, y: 1)
 
@@ -184,7 +242,7 @@ struct ParticipantRow: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.7)
                 } else {
-                    Text(name.prefix(1).uppercased())
+                    Text(initialsForUser(name: name))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                 }

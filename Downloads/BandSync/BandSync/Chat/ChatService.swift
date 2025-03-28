@@ -8,6 +8,7 @@ class ChatService: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String = ""
     @Published var hasMoreMessages: Bool = false
+    @Published var currentChatId: String?
 
     private let db = Firestore.firestore()
     private var chatRoomsListener: ListenerRegistration?
@@ -21,7 +22,7 @@ class ChatService: ObservableObject {
     }
 
     var currentUserName: String {
-        return Auth.auth().currentUser?.displayName ?? "Member"
+        return Auth.auth().currentUser?.displayName ?? "Пользователь"
     }
 
     // Получение списка чатов для текущего пользователя
@@ -63,6 +64,7 @@ class ChatService: ObservableObject {
 
     // Получение сообщений для конкретного чата
     func fetchMessages(for chatRoomId: String) {
+        self.currentChatId = chatRoomId
         guard let userId = currentUserId else {
             self.errorMessage = "Не удалось получить ID пользователя"
             return
@@ -177,8 +179,8 @@ class ChatService: ObservableObject {
             }
     }
 
-    // Отправка нового сообщения
-    func sendMessage(text: String, in chatRoomId: String) {
+    // Отправка нового сообщения с поддержкой ответов
+    func sendMessage(text: String, in chatRoomId: String, replyTo: ReplyData? = nil) {
         guard let userId = currentUserId, !text.isEmpty else { return }
         
         // Проверка наличия пользователя в чате
@@ -208,7 +210,8 @@ class ChatService: ObservableObject {
                 text: text,
                 timestamp: Date(),
                 isRead: false,
-                status: .sending
+                status: .sending,
+                replyTo: replyTo
             )
 
             // Добавляем сообщение локально с временным ID
@@ -252,7 +255,7 @@ class ChatService: ObservableObject {
         }
     }
 
-    // Повторная отправка сообщения при ошибке
+    // Повторная отправка сообщения при ошибке с поддержкой ответов
     func resendMessage(_ message: ChatMessage, in chatRoomId: String) {
         guard message.status == .failed else { return }
 
@@ -313,83 +316,7 @@ class ChatService: ObservableObject {
         }
     }
 
-    // Создание нового чата
-    func createChat(name: String, participants: [String], isGroupChat: Bool = false) {
-        guard let userId = currentUserId else {
-            print("⛔️ Failed to get user ID for chat creation")
-            errorMessage = "Не удалось получить ID пользователя"
-            return
-        }
-
-        isLoading = true
-
-        // Убеждаемся, что текущий пользователь включен в участников
-        var allParticipants = participants
-        if !allParticipants.contains(userId) {
-            allParticipants.append(userId)
-        }
-
-        print("🔄 Creating chat: \(name) with \(allParticipants.count) participants")
-
-        let chatId = UUID().uuidString
-        let chatRoom = ChatRoom(
-            id: chatId,
-            name: name,
-            participants: allParticipants,
-            lastMessageDate: Date(),
-            isGroupChat: isGroupChat
-        )
-
-        let newChatRef = db.collection("chatRooms").document(chatId)
-
-        newChatRef.setData(chatRoom.asDict) { [weak self] error in
-            guard let self = self else { return }
-            self.isLoading = false
-
-            if let error = error {
-                print("⛔️ Error creating chat: \(error.localizedDescription)")
-                self.errorMessage = "Ошибка создания чата: \(error.localizedDescription)"
-            } else {
-                print("✅ Chat successfully created, ID: \(chatId)")
-                
-                // Добавляем системное сообщение
-                let welcomeMessage = "Чат создан"
-                self.addSystemMessage(chatId: chatId, text: welcomeMessage)
-
-                // Обновляем список чатов
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.fetchChatRooms()
-                }
-            }
-        }
-    }
-    
-    // Добавление системного сообщения
-    private func addSystemMessage(chatId: String, text: String) {
-        let systemMessageId = UUID().uuidString
-        let systemMessage: [String: Any] = [
-            "senderId": "system",
-            "senderName": "System",
-            "text": text,
-            "timestamp": Timestamp(date: Date()),
-            "isRead": true,
-            "status": MessageStatus.sent.rawValue
-        ]
-        
-        db.collection("chatRooms")
-            .document(chatId)
-            .collection("messages")
-            .document(systemMessageId)
-            .setData(systemMessage) { error in
-                if let error = error {
-                    print("⛔️ Error adding system message: \(error.localizedDescription)")
-                } else {
-                    print("✅ System message added to chat: \(chatId)")
-                }
-            }
-    }
-
-    // Редактирование сообщения
+    // Редактирование сообщения с сохранением данных об ответе
     func editMessage(messageId: String, in chatRoomId: String, newText: String) {
         guard let userId = currentUserId else {
             errorMessage = "Не удалось получить ID пользователя"
@@ -402,16 +329,26 @@ class ChatService: ObservableObject {
             return
         }
 
+        // Сохраняем данные об ответе, если они есть
+        let replyData = messages[index].replyTo
+
         // Обновляем сообщение в Firebase
         let messageRef = db.collection("chatRooms")
             .document(chatRoomId)
             .collection("messages")
             .document(messageId)
 
-        messageRef.updateData([
+        var updateData: [String: Any] = [
             "text": newText,
             "status": MessageStatus.edited.rawValue
-        ]) { [weak self] error in
+        ]
+
+        // Добавляем данные об ответе, если они есть
+        if let replyData = replyData {
+            updateData["replyTo"] = replyData.asDict
+        }
+
+        messageRef.updateData(updateData) { [weak self] error in
             guard let self = self else { return }
 
             if let error = error {
@@ -595,102 +532,80 @@ class ChatService: ObservableObject {
         messagesListener?.remove()
     }
 
-    // Удаление чата
-    func deleteChat(chatId: String, completion: @escaping (Bool) -> Void) {
+    // Создание нового чата
+    func createChat(name: String, participants: [String], isGroupChat: Bool = false) {
         guard let userId = currentUserId else {
+            print("⛔️ Failed to get user ID for chat creation")
             errorMessage = "Не удалось получить ID пользователя"
-            completion(false)
             return
         }
 
         isLoading = true
 
-        // Проверяем, есть ли у пользователя доступ к этому чату
-        db.collection("chatRooms").document(chatId).getDocument { [weak self] snapshot, error in
-            guard let self = self else { return }
-
-            if let error = error {
-                self.isLoading = false
-                self.errorMessage = "Ошибка доступа к чату: \(error.localizedDescription)"
-                completion(false)
-                return
-            }
-
-            guard let data = snapshot?.data(),
-                  let participants = data["participants"] as? [String],
-                  participants.contains(userId) else {
-                self.isLoading = false
-                self.errorMessage = "У вас нет прав на удаление этого чата"
-                completion(false)
-                return
-            }
-
-            // Сначала удаляем все сообщения в чате
-            let messagesRef = self.db.collection("chatRooms").document(chatId).collection("messages")
-
-            messagesRef.getDocuments { [weak self] (snapshot, error) in
-                guard let self = self else { return }
-
-                if let error = error {
-                    self.isLoading = false
-                    self.errorMessage = "Ошибка удаления сообщений чата: \(error.localizedDescription)"
-                    completion(false)
-                    return
-                }
-
-                // Если в чате нет сообщений, удаляем сам чат
-                if snapshot?.documents.isEmpty ?? true {
-                    self.deleteChatDocument(chatId: chatId, completion: completion)
-                    return
-                }
-
-                // Создаем группу для отслеживания завершения удаления всех сообщений
-                let group = DispatchGroup()
-                var hasError = false
-
-                // Удаляем каждое сообщение
-                for document in snapshot?.documents ?? [] {
-                    group.enter()
-                    messagesRef.document(document.documentID).delete { error in
-                        if let error = error {
-                            print("⛔️ Ошибка удаления сообщения: \(error.localizedDescription)")
-                            hasError = true
-                        }
-                        group.leave()
-                    }
-                }
-
-                // После удаления всех сообщений удаляем сам чат
-                group.notify(queue: .main) {
-                    if hasError {
-                        self.isLoading = false
-                        self.errorMessage = "Возникли ошибки при удалении сообщений"
-                        completion(false)
-                    } else {
-                        self.deleteChatDocument(chatId: chatId, completion: completion)
-                    }
-                }
-            }
+        // Убеждаемся, что текущий пользователь включен в участников
+        var allParticipants = participants
+        if !allParticipants.contains(userId) {
+            allParticipants.append(userId)
         }
-    }
 
-    // Вспомогательный метод для удаления документа чата
-    private func deleteChatDocument(chatId: String, completion: @escaping (Bool) -> Void) {
-        db.collection("chatRooms").document(chatId).delete { [weak self] error in
+        print("🔄 Creating chat: \(name) with \(allParticipants.count) participants")
+
+        let chatId = UUID().uuidString
+        let chatRoom = ChatRoom(
+            id: chatId,
+            name: name,
+            participants: allParticipants,
+            lastMessageDate: Date(),
+            isGroupChat: isGroupChat
+        )
+
+        let newChatRef = db.collection("chatRooms").document(chatId)
+
+        newChatRef.setData(chatRoom.asDict) { [weak self] error in
             guard let self = self else { return }
             self.isLoading = false
 
             if let error = error {
-                self.errorMessage = "Ошибка удаления чата: \(error.localizedDescription)"
-                print("⛔️ Ошибка удаления чата: \(error.localizedDescription)")
-                completion(false)
+                print("⛔️ Error creating chat: \(error.localizedDescription)")
+                self.errorMessage = "Ошибка создания чата: \(error.localizedDescription)"
             } else {
-                print("✅ Чат успешно удален")
-                // Обновим локальный список
-                self.chatRooms.removeAll { $0.id == chatId }
-                completion(true)
+                print("✅ Chat successfully created, ID: \(chatId)")
+                
+                // Добавляем системное сообщение
+                let welcomeMessage = "Чат создан"
+                self.addSystemMessage(chatId: chatId, text: welcomeMessage)
+
+                // Обновляем список чатов
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.fetchChatRooms()
+                }
             }
         }
+    }
+    
+    // Добавление системного сообщения
+    private func addSystemMessage(chatId: String, text: String) {
+        let systemMessageId = UUID().uuidString
+        let systemMessage: [String: Any] = [
+            "senderId": "system",
+            "senderName": "System",
+            "text": text,
+            "timestamp": Timestamp(date: Date()),
+            "isRead": true,
+            "status": MessageStatus.sent.rawValue
+        ]
+        
+        db.collection("chatRooms")
+            .document(chatId)
+            .collection("messages")
+            .document(systemMessageId)
+            .setData(systemMessage) { error in
+                if let error = error {
+                    print("⛔️ Error adding system message: \(error.localizedDescription)")
+                } else {
+                    print("✅ System message added to chat: \(chatId)")
+                }
+            }
     }
 
     // Редактирование чата
@@ -789,4 +704,102 @@ class ChatService: ObservableObject {
             }
         }
     }
-}
+    
+    // Удаление чата
+    func deleteChat(chatId: String, completion: @escaping (Bool) -> Void) {
+        guard let userId = currentUserId else {
+            errorMessage = "Не удалось получить ID пользователя"
+            completion(false)
+            return
+        }
+
+        isLoading = true
+
+        // Проверяем, есть ли у пользователя доступ к этому чату
+        db.collection("chatRooms").document(chatId).getDocument { [weak self] snapshot, error in
+            guard let self = self else { return }
+
+            if let error = error {
+                self.isLoading = false
+                self.errorMessage = "Ошибка доступа к чату: \(error.localizedDescription)"
+                completion(false)
+                return
+            }
+
+            guard let data = snapshot?.data(),
+                  let participants = data["participants"] as? [String],
+                  participants.contains(userId) else {
+                self.isLoading = false
+                self.errorMessage = "У вас нет прав на удаление этого чата"
+                completion(false)
+                return
+            }
+
+            // Сначала удаляем все сообщения в чате
+            let messagesRef = self.db.collection("chatRooms").document(chatId).collection("messages")
+
+            messagesRef.getDocuments { [weak self] (snapshot, error) in
+                guard let self = self else { return }
+
+                if let error = error {
+                    self.isLoading = false
+                    self.errorMessage = "Ошибка удаления сообщений чата: \(error.localizedDescription)"
+                    completion(false)
+                    return
+                }
+
+                // Если в чате нет сообщений, удаляем сам чат
+                if snapshot?.documents.isEmpty ?? true {
+                    self.deleteChatDocument(chatId: chatId, completion: completion)
+                    return
+                }
+
+                // Создаем группу для отслеживания завершения удаления всех сообщений
+                let group = DispatchGroup()
+                var hasError = false
+
+                // Удаляем каждое сообщение
+                for document in snapshot?.documents ?? [] {
+                    group.enter()
+                    messagesRef.document(document.documentID).delete { error in
+                        if let error = error {
+                            print("⛔️ Ошибка удаления сообщения: \(error.localizedDescription)")
+                            hasError = true
+                        }
+                        group.leave()
+                    }
+                }
+
+                // После удаления всех сообщений удаляем сам чат
+                                group.notify(queue: .main) {
+                                    if hasError {
+                                        self.isLoading = false
+                                        self.errorMessage = "Возникли ошибки при удалении сообщений"
+                                        completion(false)
+                                    } else {
+                                        self.deleteChatDocument(chatId: chatId, completion: completion)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Вспомогательный метод для удаления документа чата
+                    private func deleteChatDocument(chatId: String, completion: @escaping (Bool) -> Void) {
+                        db.collection("chatRooms").document(chatId).delete { [weak self] error in
+                            guard let self = self else { return }
+                            self.isLoading = false
+
+                            if let error = error {
+                                self.errorMessage = "Ошибка удаления чата: \(error.localizedDescription)"
+                                print("⛔️ Ошибка удаления чата: \(error.localizedDescription)")
+                                completion(false)
+                            } else {
+                                print("✅ Чат успешно удален")
+                                // Обновим локальный список
+                                self.chatRooms.removeAll { $0.id == chatId }
+                                completion(true)
+                            }
+                        }
+                    }
+                }
