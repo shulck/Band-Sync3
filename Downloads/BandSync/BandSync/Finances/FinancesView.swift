@@ -480,16 +480,6 @@ struct FinancesView: View {
                     }
                 }
             }
-            .navigationTitle("Finances")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        fetchFinances()
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-            }
             .onAppear {
                 fetchUserRole()
                 FirestoreService.shared.getGroupDefaultCurrency { currency, _ in

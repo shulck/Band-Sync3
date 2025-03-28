@@ -15,73 +15,95 @@ struct EnhancedNotificationsView: View {
     
     var body: some View {
         ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
+            
             if isLoading {
-                ProgressView("Checking notification settings...")
-                    .background(Color.white.opacity(0.7))
+                NotificationLoadingView(message: "Checking notification settings...")
             } else {
                 ScrollView {
-                    VStack(spacing: 20) {
-                        // Status Card
-                        NotificationStatusCard(
+                    VStack(spacing: 24) {
+                        EnhancedStatusCard(
                             enablePushNotifications: $enablePushNotifications,
                             onChange: requestNotificationPermission
                         )
                         
                         if enablePushNotifications {
-                            // Notification Types
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Notification Types")
-                                    .font(.headline)
-                                    .padding(.bottom, 4)
+                            VStack(alignment: .leading, spacing: 16) {
+                                HStack {
+                                    Image(systemName: "bell.badge.fill")
+                                        .foregroundColor(.blue)
+                                        .font(.system(size: 18, weight: .semibold))
+                                    
+                                    Text("Notification Types")
+                                        .font(.headline)
+                                        .bold()
+                                }
+                                .padding(.bottom, 4)
                                 
-                                NotificationTypeToggle(
+                                EnhancedNotificationToggle(
                                     title: "Upcoming Events",
                                     description: "Get notified about events 24 hours before they start",
+                                    icon: "calendar.badge.exclamationmark",
                                     isOn: $upcomingEvents,
+                                    color: .blue,
                                     onChange: { saveNotificationSettings() }
                                 )
                                 
-                                NotificationTypeToggle(
+                                Divider()
+                                
+                                EnhancedNotificationToggle(
                                     title: "New Messages",
                                     description: "Get notified when someone sends you a message",
+                                    icon: "message.fill",
                                     isOn: $newMessages,
+                                    color: .green,
                                     onChange: { saveNotificationSettings() }
                                 )
                                 
-                                NotificationTypeToggle(
+                                Divider()
+                                
+                                EnhancedNotificationToggle(
                                     title: "Task Reminders",
                                     description: "Get notified about tasks assigned to you",
+                                    icon: "checklist",
                                     isOn: $taskReminders,
+                                    color: .orange,
                                     onChange: { saveNotificationSettings() }
                                 )
                             }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(16)
+                            .padding(20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(.systemBackground))
+                                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 2)
+                            )
                             .padding(.horizontal)
                             
-                            // System Settings Info
-                            SystemSettingsInfoCard(
+                            EnhancedSystemSettingsCard(
                                 showSettings: $showPermissionSettings
                             )
                         } else {
-                            // Permissions Required
-                            NotificationPermissionsCard(
+                            EnhancedPermissionsCard(
                                 showSettings: $showPermissionSettings
                             )
                         }
                         
                         if let lastUpdated = lastUpdated {
-                            Text("Last updated: \(formattedDate(lastUpdated))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 8)
+                            HStack {
+                                Image(systemName: "clock")
+                                    .foregroundColor(.secondary)
+                                    .font(.system(size: 12))
+                                
+                                Text("Last updated: \(formattedDate(lastUpdated))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 8)
                         }
                         
                         if savedSuccess {
-                            Text("Settings saved successfully!")
-                                .foregroundColor(.green)
-                                .padding()
+                            SuccessMessageView(message: "Settings saved successfully!")
                                 .onAppear {
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                                         withAnimation {
@@ -118,18 +140,13 @@ struct EnhancedNotificationsView: View {
         }
     }
     
-    // MARK: - Helper Methods
-    
     func loadNotificationSettings() {
         isLoading = true
         
-        // Check if notifications are authorized
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
-                // Only enable the toggle if notifications are authorized
                 self.enablePushNotifications = (settings.authorizationStatus == .authorized)
                 
-                // Load saved settings
                 self.upcomingEvents = UserDefaults.standard.bool(forKey: "notifyUpcomingEvents")
                 self.newMessages = UserDefaults.standard.bool(forKey: "notifyNewMessages")
                 self.taskReminders = UserDefaults.standard.bool(forKey: "notifyTaskReminders")
@@ -145,7 +162,6 @@ struct EnhancedNotificationsView: View {
     
     func requestNotificationPermission() {
         if enablePushNotifications {
-            // User trying to turn off notifications, just save settings
             saveNotificationSettings()
             return
         }
@@ -173,12 +189,10 @@ struct EnhancedNotificationsView: View {
         UserDefaults.standard.set(now, forKey: "notificationSettingsLastUpdated")
         lastUpdated = now
         
-        // Show success message briefly
         withAnimation {
             savedSuccess = true
         }
         
-        // Register for notifications based on settings
         if enablePushNotifications {
             registerNotificationCategories()
         }
@@ -196,7 +210,6 @@ struct EnhancedNotificationsView: View {
         return await withCheckedContinuation { continuation in
             loadNotificationSettings()
             
-            // Simulate a brief loading period for better UX
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 isRefreshing = false
                 continuation.resume()
@@ -205,10 +218,8 @@ struct EnhancedNotificationsView: View {
     }
     
     func registerNotificationCategories() {
-        // Register categories for different types of notifications
         let center = UNUserNotificationCenter.current()
         
-        // Create actions
         let viewAction = UNNotificationAction(
             identifier: "VIEW_ACTION",
             title: "View Details",
@@ -221,7 +232,6 @@ struct EnhancedNotificationsView: View {
             options: .authenticationRequired
         )
         
-        // Create event category
         let eventCategory = UNNotificationCategory(
             identifier: "EVENT_NOTIFICATION",
             actions: [viewAction],
@@ -229,7 +239,6 @@ struct EnhancedNotificationsView: View {
             options: []
         )
         
-        // Create message category
         let messageCategory = UNNotificationCategory(
             identifier: "MESSAGE_NOTIFICATION",
             actions: [viewAction, markAsReadAction],
@@ -237,7 +246,6 @@ struct EnhancedNotificationsView: View {
             options: []
         )
         
-        // Create task category
         let taskCategory = UNNotificationCategory(
             identifier: "TASK_NOTIFICATION",
             actions: [viewAction],
@@ -245,7 +253,6 @@ struct EnhancedNotificationsView: View {
             options: []
         )
         
-        // Register categories
         center.setNotificationCategories([eventCategory, messageCategory, taskCategory])
     }
     
@@ -257,21 +264,33 @@ struct EnhancedNotificationsView: View {
     }
 }
 
-// MARK: - Supporting Components
-
-struct NotificationStatusCard: View {
+struct EnhancedStatusCard: View {
     @Binding var enablePushNotifications: Bool
     var onChange: () -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 22))
-                    .foregroundColor(.blue)
+        VStack(spacing: 16) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(enablePushNotifications ? Color.blue.opacity(0.15) : Color.secondary.opacity(0.15))
+                        .frame(width: 48, height: 48)
+                    
+                    Image(systemName: enablePushNotifications ? "bell.fill" : "bell.slash.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(enablePushNotifications ? .blue : .secondary)
+                }
                 
-                Text("Push Notifications")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Push Notifications")
+                        .font(.headline)
+                        .bold()
+                    
+                    Text(enablePushNotifications ?
+                        "Enabled" : "Disabled")
+                        .font(.subheadline)
+                        .foregroundColor(enablePushNotifications ? .green : .secondary)
+                }
                 
                 Spacer()
                 
@@ -279,37 +298,60 @@ struct NotificationStatusCard: View {
                     .onChange(of: enablePushNotifications) { _ in
                         onChange()
                     }
+                    .toggleStyle(SwitchToggleStyle(tint: .blue))
+                    .labelsHidden()
+                    .scaleEffect(0.9)
             }
             
             Text(enablePushNotifications ?
-                "You will receive push notifications based on your preferences" :
+                "You will receive push notifications based on your preferences below" :
                 "Enable push notifications to stay updated with your band's activities")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 2)
+        )
         .padding(.horizontal)
     }
 }
 
-struct NotificationTypeToggle: View {
+struct EnhancedNotificationToggle: View {
     var title: String
     var description: String
+    var icon: String
     @Binding var isOn: Bool
+    var color: Color
     var onChange: () -> Void
     
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .center, spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(color)
+            }
+            
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(isOn ? .primary : .secondary)
                 
                 Text(description)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
             Spacer()
@@ -318,75 +360,202 @@ struct NotificationTypeToggle: View {
                 .onChange(of: isOn) { _ in
                     onChange()
                 }
+                .toggleStyle(SwitchToggleStyle(tint: color))
+                .labelsHidden()
+                .scaleEffect(0.85)
         }
         .padding(.vertical, 4)
     }
 }
 
-struct SystemSettingsInfoCard: View {
+struct EnhancedSystemSettingsCard: View {
     @Binding var showSettings: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Image(systemName: "info.circle")
+                Image(systemName: "gearshape.fill")
                     .foregroundColor(.blue)
+                    .font(.system(size: 18, weight: .semibold))
                 
                 Text("System Settings")
                     .font(.headline)
+                    .bold()
             }
-            .padding(.bottom, 4)
             
             Text("You can manage notification permissions in the iOS Settings app.")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             
-            Button("Open Notification Settings") {
+            Button(action: {
                 showSettings = true
+            }) {
+                HStack {
+                    Image(systemName: "arrow.right.circle.fill")
+                    Text("Open Notification Settings")
+                        .fontWeight(.medium)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 16)
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(8)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 2)
+        )
         .padding(.horizontal)
     }
 }
 
-struct NotificationPermissionsCard: View {
+struct EnhancedPermissionsCard: View {
     @Binding var showSettings: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "exclamationmark.triangle")
-                    .foregroundColor(.orange)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.2))
+                        .frame(width: 48, height: 48)
+                    
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.orange)
+                }
                 
-                Text("Permission Required")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Permission Required")
+                        .font(.headline)
+                        .bold()
+                    
+                    Text("Notifications are disabled")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
-            .padding(.bottom, 4)
             
             Text("Notifications are currently disabled for this app. Enable them in the iOS Settings to receive notifications about events, messages, and tasks.")
-                .font(.callout)
+                .font(.subheadline)
                 .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 4)
             
-            Button("Open Notification Settings") {
+            Button(action: {
                 showSettings = true
+            }) {
+                HStack {
+                    Image(systemName: "arrow.right.circle.fill")
+                    Text("Open Notification Settings")
+                        .fontWeight(.medium)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.orange, Color.orange.opacity(0.8)]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .shadow(color: Color.orange.opacity(0.3), radius: 5, x: 0, y: 3)
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 16)
-            .background(Color.orange)
-            .foregroundColor(.white)
-            .cornerRadius(8)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 2)
+        )
+        .padding(.horizontal)
+    }
+}
+
+struct SuccessMessageView: View {
+    var message: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+                .font(.system(size: 18))
+            
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.green)
+            
+            Spacer()
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.green.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.green.opacity(0.2), lineWidth: 1)
+                )
+        )
         .padding(.horizontal)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
+struct NotificationLoadingView: View {
+    var message: String
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 8)
+                    .frame(width: 80, height: 80)
+                
+                Circle()
+                    .trim(from: 0, to: 0.7)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.5)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(Angle(degrees: 360))
+                    .animation(
+                        Animation.linear(duration: 1)
+                            .repeatForever(autoreverses: false),
+                        value: UUID()
+                    )
+            }
+            
+            Text(message)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text("Please wait")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground).opacity(0.95))
     }
 }

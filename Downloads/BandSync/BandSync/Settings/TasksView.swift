@@ -26,33 +26,49 @@ struct TasksView: View {
     var body: some View {
         ZStack {
             if isLoading {
-                ProgressView("Loading tasks...")
+                TasksLoadingView()
             } else {
-                VStack {
-                    Picker("Filter", selection: $filter) {
-                        Text("All").tag(TaskFilter.all)
-                        Text("Pending").tag(TaskFilter.pending)
-                        Text("Completed").tag(TaskFilter.completed)
+                VStack(spacing: 0) {
+                    // Стилизованный фильтр
+                    VStack(spacing: 12) {
+                        Text("Filter tasks")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                        
+                        Picker("Filter", selection: $filter) {
+                            HStack {
+                                Image(systemName: "list.bullet")
+                                Text("All").tag(TaskFilter.all)
+                            }
+                            
+                            HStack {
+                                Image(systemName: "clock")
+                                Text("Pending").tag(TaskFilter.pending)
+                            }
+                            
+                            HStack {
+                                Image(systemName: "checkmark")
+                                Text("Completed").tag(TaskFilter.completed)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .padding(.horizontal)
                     }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .padding()
+                    .padding(.vertical, 12)
+                    .background(Color(.systemGray6))
                     
                     if filteredTasks.isEmpty {
-                        VStack {
-                            Spacer()
-                            Text(emptyStateMessage)
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                                .padding()
-                            Spacer()
-                        }
+                        TaskEmptyStateView(filter: filter)
                     } else {
                         List {
                             ForEach(filteredTasks) { task in
-                                TaskRow(task: task, onToggleComplete: { toggleTask(task) })
+                                EnhancedTaskRow(task: task, onToggleComplete: { toggleTask(task) })
                             }
                             .onDelete(perform: deleteTasks)
                         }
+                        .listStyle(InsetGroupedListStyle())
                     }
                 }
             }
@@ -61,12 +77,21 @@ struct TasksView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: { showingAddTask = true }) {
-                    Image(systemName: "plus")
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Add")
+                    }
+                    .foregroundColor(.blue)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
                 }
             }
         }
         .sheet(isPresented: $showingAddTask) {
-            AddTaskView(onAdd: addTask)
+            EnhancedAddTaskView(onAdd: addTask)
         }
         .onAppear(perform: fetchTasks)
         .refreshable {
@@ -249,40 +274,54 @@ struct Task: Identifiable {
     var assigneeName: String
 }
 
-struct TaskRow: View {
+// Обновленный вид строки задачи
+struct EnhancedTaskRow: View {
     let task: Task
     let onToggleComplete: () -> Void
     
     var body: some View {
-        HStack {
+        HStack(spacing: 16) {
             Button(action: onToggleComplete) {
-                Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(task.completed ? .green : .gray)
-                    .font(.title2)
+                ZStack {
+                    Circle()
+                        .stroke(task.completed ? Color.green : Color.gray.opacity(0.5), lineWidth: 1.5)
+                        .frame(width: 26, height: 26)
+                    
+                    if task.completed {
+                        Circle()
+                            .fill(Color.green.opacity(0.2))
+                            .frame(width: 26, height: 26)
+                        
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.green)
+                    }
+                }
             }
             .buttonStyle(BorderlessButtonStyle())
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(task.title)
                     .strikethrough(task.completed)
                     .fontWeight(.medium)
+                    .foregroundColor(task.completed ? .secondary : .primary)
                 
-                HStack {
-                    Text("Due: \(formattedDate(task.dueDate))")
-                        .font(.caption)
-                        .foregroundColor(isPastDue(task.dueDate) && !task.completed ? .red : .secondary)
+                HStack(spacing: 12) {
+                    TaskInfoBadge(
+                        icon: "calendar",
+                        text: formattedDate(task.dueDate),
+                        isPastDue: isPastDue(task.dueDate) && !task.completed
+                    )
                     
-                    Text("•")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("Assigned to: \(task.assigneeName)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    TaskInfoBadge(
+                        icon: "person",
+                        text: task.assigneeName
+                    )
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
     
     func formattedDate(_ date: Date) -> String {
@@ -297,12 +336,109 @@ struct TaskRow: View {
     }
 }
 
-struct AddTaskView: View {
+// Бейдж с информацией о задаче
+struct TaskInfoBadge: View {
+    var icon: String
+    var text: String
+    var isPastDue: Bool = false
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+            
+            Text(text)
+                .font(.caption)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isPastDue ? Color.red.opacity(0.1) : Color(.systemGray6))
+        )
+        .foregroundColor(isPastDue ? .red : .secondary)
+    }
+}
+
+// Пустое состояние для задач
+struct TaskEmptyStateView: View {
+    var filter: TasksView.TaskFilter
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            
+            Image(systemName: iconForFilter)
+                .font(.system(size: 50))
+                .foregroundColor(.gray.opacity(0.5))
+                .padding()
+                .background(Circle().fill(Color.gray.opacity(0.1)))
+            
+            Text(messageForFilter)
+                .font(.headline)
+                .foregroundColor(.secondary)
+            
+            Text(subtitleForFilter)
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            Spacer()
+        }
+        .padding()
+    }
+    
+    var iconForFilter: String {
+        switch filter {
+        case .all: return "tray"
+        case .pending: return "clock"
+        case .completed: return "checkmark.circle"
+        }
+    }
+    
+    var messageForFilter: String {
+        switch filter {
+        case .all: return "No tasks yet"
+        case .pending: return "No pending tasks"
+        case .completed: return "No completed tasks"
+        }
+    }
+    
+    var subtitleForFilter: String {
+        switch filter {
+        case .all:
+            return "Tap the + button to add your first task"
+        case .pending:
+            return "All your tasks are completed"
+        case .completed:
+            return "Complete some tasks to see them here"
+        }
+    }
+}
+
+// Индикатор загрузки специфический для TasksView
+struct TasksLoadingView: View {
+    var body: some View {
+        VStack {
+            ProgressView()
+                .scaleEffect(1.5)
+                .padding()
+            
+            Text("Loading tasks...")
+                .font(.headline)
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+// Улучшенный вид добавления задачи
+struct EnhancedAddTaskView: View {
     @Environment(\.presentationMode) var presentationMode
     @State private var title = ""
     @State private var dueDate = Date().addingTimeInterval(86400) // Tomorrow
     @State private var assignee = "self" // Default to self
-    @State private var assignees: [UserInfo] = []
+    @State private var assignees: [TaskUserInfo] = []
     @State private var isLoading = true
     @State private var userName = ""
     @State private var userId = ""
@@ -311,28 +447,91 @@ struct AddTaskView: View {
     
     var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("Task Details")) {
-                    TextField("Task Title", text: $title)
-                    
-                    DatePicker("Due Date", selection: $dueDate, displayedComponents: .date)
-                }
-                
-                Section(header: Text("Assign To")) {
-                    Picker("Assignee", selection: $assignee) {
-                        Text("Me").tag("self")
+            ZStack {
+                if isLoading {
+                    TasksLoadingView()
+                } else {
+                    Form {
+                        Section {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Task Name")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                TextField("Enter task title", text: $title)
+                                    .font(.headline)
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+                            }
+                            .padding(.vertical, 6)
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Due Date")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                DatePicker("", selection: $dueDate, displayedComponents: .date)
+                                    .datePickerStyle(GraphicalDatePickerStyle())
+                                    .padding(.vertical, 6)
+                            }
+                        } header: {
+                            SectionHeaderView(title: "TASK DETAILS", icon: "list.bullet.clipboard")
+                        }
                         
-                        ForEach(assignees) { user in
-                            Text(user.name).tag(user.id)
+                        Section {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Choose Assignee")
+                                    .font(.headline)
+                                    .padding(.bottom, 8)
+                                
+                                Button(action: { assignee = "self" }) {
+                                    AssigneeRow(
+                                        name: "Me (\(userName))",
+                                        isSelected: assignee == "self"
+                                    )
+                                }
+                                
+                                ForEach(assignees) { user in
+                                    Button(action: { assignee = user.id }) {
+                                        AssigneeRow(
+                                            name: user.name,
+                                            isSelected: assignee == user.id
+                                        )
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 6)
+                        } header: {
+                            SectionHeaderView(title: "ASSIGN TO", icon: "person.fill")
+                        }
+                        
+                        Section {
+                            Button(action: addTask) {
+                                Text("Add Task")
+                                    .font(.headline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding()
+                                    .background(
+                                        title.isEmpty ?
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [Color.gray, Color.gray.opacity(0.8)]),
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            ) :
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                    )
+                                    .cornerRadius(10)
+                            }
+                            .disabled(title.isEmpty)
                         }
                     }
-                }
-                
-                Section {
-                    Button("Add Task") {
-                        addTask()
-                    }
-                    .disabled(title.isEmpty)
                 }
             }
             .navigationTitle("New Task")
@@ -340,18 +539,39 @@ struct AddTaskView: View {
                 leading: Button("Cancel") {
                     presentationMode.wrappedValue.dismiss()
                 }
+                .foregroundColor(.red)
             )
             .onAppear {
                 getCurrentUser()
                 fetchGroupMembers()
             }
-            .overlay(
-                Group {
-                    if isLoading {
-                        ProgressView()
-                            .background(Color.white.opacity(0.7))
-                    }
+        }
+    }
+    
+    // Строка для выбора исполнителя
+    struct AssigneeRow: View {
+        var name: String
+        var isSelected: Bool
+        
+        var body: some View {
+            HStack {
+                Text(name)
+                    .font(.body)
+                    .foregroundColor(isSelected ? .blue : .primary)
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.blue)
                 }
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.blue.opacity(0.1) : Color.clear)
             )
         }
     }
@@ -399,7 +619,7 @@ struct AddTaskView: View {
                             return
                         }
                         
-                        self.assignees = documents.compactMap { document -> UserInfo? in
+                        self.assignees = documents.compactMap { document -> TaskUserInfo? in
                             let data = document.data()
                             let id = document.documentID
                             
@@ -413,7 +633,7 @@ struct AddTaskView: View {
                             }
                             
                             let email = data["email"] as? String ?? ""
-                            return UserInfo(id: id, name: name, email: email)
+                            return TaskUserInfo(id: id, name: name, email: email)
                         }
                     }
             } else {
@@ -457,4 +677,11 @@ struct AddTaskView: View {
         // Dismiss the view
         presentationMode.wrappedValue.dismiss()
     }
+}
+
+// Отдельная модель для TasksView, чтобы избежать конфликтов
+struct TaskUserInfo: Identifiable {
+    var id: String
+    var name: String
+    var email: String
 }

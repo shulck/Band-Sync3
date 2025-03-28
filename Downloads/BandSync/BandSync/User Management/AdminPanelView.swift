@@ -15,86 +15,112 @@ struct AdminPanelView: View {
 
     var body: some View {
         ZStack {
+            // Фоновый цвет для всего экрана
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
+                
             if isLoading {
-                ProgressView("Loading group data...")
+                AdminLoadingView(message: "Loading group data...")
             } else {
-                VStack {
-                    // Group information header
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Group: \(groupName)")
-                                .font(.headline)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                newGroupName = groupName
-                                showingEditGroupName = true
-                            }) {
-                                Image(systemName: "pencil")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                        
-                        HStack {
-                            Text("Invite Code: \(groupCode)")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                shareGroupCode()
-                            }) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
+                VStack(spacing: 0) {
+                    // Группа информационная карточка
+                    GroupInfoCard(
+                        groupName: groupName, 
+                        groupCode: groupCode,
+                        onEditName: {
+                            newGroupName = groupName
+                            showingEditGroupName = true
+                        },
+                        onShareCode: shareGroupCode
+                    )
                     .padding(.horizontal)
+                    .padding(.top)
                     
-                    // Tab selector
-                    Picker("", selection: $selectedTab) {
-                        Text("Pending Requests").tag(0)
-                        Text("Members").tag(1)
+                    // Стилизованный селектор вкладок
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            TabButton(
+                                title: "Pending Requests",
+                                icon: "person.crop.circle.badge.questionmark",
+                                isSelected: selectedTab == 0,
+                                badgeCount: pendingUsers.count
+                            ) {
+                                withAnimation { selectedTab = 0 }
+                            }
+                            
+                            TabButton(
+                                title: "Members",
+                                icon: "person.3.fill",
+                                isSelected: selectedTab == 1,
+                                badgeCount: nil
+                            ) {
+                                withAnimation { selectedTab = 1 }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 16)
+                        .padding(.bottom, 8)
+                        
+                        // Индикатор активной вкладки
+                        HStack {
+                            Spacer()
+                                .frame(width: selectedTab == 0 ? nil : 0)
+                            
+                            Rectangle()
+                                .fill(Color.blue)
+                                .frame(width: UIScreen.main.bounds.width / 2 - 32, height: 3)
+                                .cornerRadius(1.5)
+                            
+                            Spacer()
+                                .frame(width: selectedTab == 1 ? nil : 0)
+                        }
+                        .animation(.spring(), value: selectedTab)
                     }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .padding()
                     
-                    // Content based on selected tab
+                    // Содержимое вкладок
                     if selectedTab == 0 {
                         if pendingUsers.isEmpty {
-                            VStack {
-                                Spacer()
-                                Text("No pending requests")
-                                    .foregroundColor(.gray)
-                                Spacer()
-                            }
+                            EmptyStateView(
+                                icon: "person.crop.circle.badge.checkmark",
+                                title: "No Pending Requests",
+                                message: "When new users request to join your group, they will appear here for approval."
+                            )
                         } else {
-                            List {
-                                ForEach(pendingUsers) { user in
-                                    PendingUserRow(user: user, onApprove: {
-                                        approveUser(user: user)
-                                    }, onReject: {
-                                        rejectUser(user: user)
-                                    })
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(pendingUsers) { user in
+                                        EnhancedPendingUserRow(
+                                            user: user,
+                                            onApprove: { approveUser(user: user) },
+                                            onReject: { rejectUser(user: user) }
+                                        )
+                                    }
                                 }
+                                .padding(.horizontal)
+                                .padding(.top, 16)
                             }
                         }
                     } else {
-                        List {
-                            ForEach(activeUsers) { user in
-                                ActiveUserRow(user: user, onChangeRole: { newRole in
-                                    changeUserRole(user: user, newRole: newRole)
-                                }, onRemove: {
-                                    removeUser(user: user)
-                                })
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(activeUsers) { user in
+                                    EnhancedActiveUserRow(
+                                        user: user,
+                                        onChangeRole: { newRole in
+                                            changeUserRole(user: user, newRole: newRole)
+                                        },
+                                        onRemove: {
+                                            removeUser(user: user)
+                                        }
+                                    )
+                                }
                             }
+                            .padding(.horizontal)
+                            .padding(.top, 16)
                         }
                     }
+                    
+                    Spacer()
                 }
                 .alert(isPresented: $showingEditGroupName) {
                     Alert(
@@ -465,5 +491,417 @@ struct AdminPanelView: View {
            let rootVC = scene.windows.first?.rootViewController {
             rootVC.present(activityVC, animated: true)
         }
+    }
+}
+
+// MARK: - Supporting Components
+
+// Карточка информации о группе
+struct GroupInfoCard: View {
+    var groupName: String
+    var groupCode: String
+    var onEditName: () -> Void
+    var onShareCode: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
+                // Group icon
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.7)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 48, height: 48)
+                    
+                    Image(systemName: "music.note.list")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(groupName)
+                            .font(.headline)
+                            .fontWeight(.bold)
+                        
+                        Button(action: onEditName) {
+                            Image(systemName: "pencil.circle.fill")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 18))
+                        }
+                    }
+                    
+                    Text("Music Band")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            
+            Divider()
+            
+            // Invite code section
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("INVITE CODE")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.semibold)
+                    
+                    Text(groupCode)
+                        .font(.system(.body, design: .monospaced, weight: .bold))
+                        .padding(.vertical, 4)
+                }
+                
+                Spacer()
+                
+                Button(action: onShareCode) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Share")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+        )
+    }
+}
+
+// Кнопка вкладки
+struct TabButton: View {
+    var title: String
+    var icon: String
+    var isSelected: Bool
+    var badgeCount: Int?
+    var action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    
+                    Text(title)
+                        .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
+                    
+                    if let count = badgeCount, count > 0 {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 20, height: 20)
+                            
+                            Text("\(count)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                }
+                .foregroundColor(isSelected ? .blue : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+// Улучшенная строка ожидающего пользователя
+struct EnhancedPendingUserRow: View {
+    var user: UserModel
+    var onApprove: () -> Void
+    var onReject: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 16) {
+                // User avatar
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.1))
+                        .frame(width: 50, height: 50)
+                    
+                    Text(userInitials(from: user.name))
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.blue)
+                }
+                
+                // User info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(user.name.isEmpty ? "Unknown User" : user.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                    
+                    Text(user.email)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    
+                    HStack {
+                        Text("Requested to join")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            
+            // Action buttons
+            HStack(spacing: 10) {
+                Button(action: onReject) {
+                    HStack {
+                        Image(systemName: "xmark")
+                        Text("Reject")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                
+                Button(action: onApprove) {
+                    HStack {
+                        Image(systemName: "checkmark")
+                        Text("Approve")
+                    }
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.green)
+                    .cornerRadius(8)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        )
+    }
+    
+    private func userInitials(from name: String) -> String {
+        let components = name.split(separator: " ")
+        if components.isEmpty {
+            return "?"
+        } else if components.count == 1 {
+            return String(components[0].prefix(1).uppercased())
+        } else {
+            return "\(components[0].prefix(1))\(components[1].prefix(1))".uppercased()
+        }
+    }
+}
+
+// Улучшенная строка активного пользователя
+struct EnhancedActiveUserRow: View {
+    var user: UserModel
+    var onChangeRole: (String) -> Void
+    var onRemove: () -> Void
+    @State private var showRoleOptions = false
+    
+    // Доступные роли
+    let roles = ["Admin", "Manager", "Member", "Musician"]
+    
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            // User avatar
+            ZStack {
+                Circle()
+                    .fill(roleColor(for: user.role).opacity(0.1))
+                    .frame(width: 50, height: 50)
+                
+                Text(userInitials(from: user.name))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(roleColor(for: user.role))
+            }
+            
+            // User info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(user.name.isEmpty ? "Unknown User" : user.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                
+                Text(user.email)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 4) {
+                    Text(user.role)
+                        .font(.caption)
+                        .foregroundColor(roleColor(for: user.role))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(roleColor(for: user.role).opacity(0.1))
+                        .cornerRadius(4)
+                }
+            }
+            
+            Spacer()
+            
+            // Action menu
+            Menu {
+                // Role options
+                Menu {
+                    ForEach(roles, id: \.self) { role in
+                        Button(role) {
+                            onChangeRole(role)
+                        }
+                    }
+                } label: {
+                    Label("Change Role", systemImage: "person.crop.circle.badge.checkmark")
+                }
+                
+                // Remove user option
+                Button(role: .destructive) {
+                    onRemove()
+                } label: {
+                    Label("Remove from Group", systemImage: "person.crop.circle.badge.xmark")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        )
+    }
+    
+    private func userInitials(from name: String) -> String {
+        let components = name.split(separator: " ")
+        if components.isEmpty {
+            return "?"
+        } else if components.count == 1 {
+            return String(components[0].prefix(1).uppercased())
+        } else {
+            return "\(components[0].prefix(1))\(components[1].prefix(1))".uppercased()
+        }
+    }
+    
+    private func roleColor(for role: String) -> Color {
+        switch role {
+        case "Admin":
+            return .purple
+        case "Manager":
+            return .blue
+        case "Musician":
+            return .green
+        default:
+            return .orange
+        }
+    }
+}
+
+// Пустое состояние
+struct EmptyStateView: View {
+    var icon: String
+    var title: String
+    var message: String
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 100, height: 100)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 40))
+                    .foregroundColor(.blue)
+            }
+            
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+// Индикатор загрузки
+struct AdminLoadingView: View {
+    var message: String
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 8)
+                    .frame(width: 80, height: 80)
+                
+                Circle()
+                    .trim(from: 0, to: 0.7)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.5)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(Angle(degrees: 360))
+                    .animation(
+                        Animation.linear(duration: 1)
+                            .repeatForever(autoreverses: false),
+                        value: UUID()
+                    )
+            }
+            
+            Text(message)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text("Please wait")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+        )
     }
 }

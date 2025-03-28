@@ -12,78 +12,140 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("Theme")) {
-                Toggle("Use System Theme", isOn: $useSystemTheme)
+            Section {
+                VStack(alignment: .leading, spacing: 16) {
+                    SettingToggleRow(
+                        title: "Use System Theme",
+                        icon: "iphone",
+                        isOn: $useSystemTheme,
+                        color: .blue
+                    )
                     .onChange(of: useSystemTheme) { newValue in
                         saveAppearanceSettings()
                     }
-
-                if !useSystemTheme {
-                    Toggle("Dark Mode", isOn: $isDarkMode)
+                    
+                    if !useSystemTheme {
+                        Divider()
+                        
+                        SettingToggleRow(
+                            title: "Dark Mode",
+                            icon: "moon.fill",
+                            isOn: $isDarkMode,
+                            color: .purple
+                        )
                         .onChange(of: isDarkMode) { newValue in
                             saveAppearanceSettings()
                         }
-                }
-            }
-
-            Section(header: Text("Text Size")) {
-                Picker("Font Size", selection: $fontSize) {
-                    ForEach(0..<fontSizeOptions.count) { index in
-                        Text(fontSizeOptions[index]).tag(index)
                     }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .onChange(of: fontSize) { newValue in
-                    saveAppearanceSettings()
-                }
-
-                HStack {
-                    Text("Preview")
-                        .font(fontSizeForPreview)
-                    Spacer()
                 }
                 .padding(.vertical, 8)
+            } header: {
+                SectionHeaderView(title: "THEME", icon: "paintbrush.fill")
             }
 
-            Section(header: Text("Accent Color")) {
-                Picker("Accent Color", selection: $accentColorChoice) {
-                    ForEach(0..<accentColors.count) { index in
-                        HStack {
-                            Circle()
-                                .fill(accentColors[index])
-                                .frame(width: 20, height: 20)
-                            Text(accentColorNames[index])
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Font Size")
+                        .font(.headline)
+                        .padding(.bottom, 4)
+                    
+                    Picker("", selection: $fontSize) {
+                        ForEach(0..<fontSizeOptions.count) { index in
+                            Text(fontSizeOptions[index]).tag(index)
                         }
-                        .tag(index)
                     }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .onChange(of: fontSize) { newValue in
+                        saveAppearanceSettings()
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Preview")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text("This is how your text will appear")
+                            .font(fontSizeForPreview)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(.systemGray6))
+                            )
+                    }
+                    .padding(.top, 12)
                 }
-                .pickerStyle(WheelPickerStyle())
-                .frame(height: 100)
-                .onChange(of: accentColorChoice) { newValue in
-                    saveAppearanceSettings()
-                }
+                .padding(.vertical, 8)
+            } header: {
+                SectionHeaderView(title: "TEXT SIZE", icon: "textformat.size")
             }
 
-            Section(header: Text("Info")) {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.blue)
-
-                    Text("Some appearance changes require restarting the app to take full effect.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Choose an accent color")
+                        .font(.headline)
+                        .padding(.bottom, 4)
+                    
+                    // Color grid display
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 60))], spacing: 16) {
+                        ForEach(0..<accentColors.count, id: \.self) { index in
+                            ColorOptionView(
+                                color: accentColors[index],
+                                name: accentColorNames[index],
+                                isSelected: accentColorChoice == index
+                            )
+                            .onTapGesture {
+                                accentColorChoice = index
+                                saveAppearanceSettings()
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 8)
+            } header: {
+                SectionHeaderView(title: "ACCENT COLOR", icon: "circle.hexagongrid.fill")
+            }
 
-                Button("Apply Changes") {
-                    applyAppearanceChanges()
+            Section {
+                VStack(spacing: 16) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                            
+                        Text("Some appearance changes require restarting the app to take full effect.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                    
+                    Button(action: {
+                        applyAppearanceChanges()
+                    }) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Apply Changes")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .foregroundColor(.white)
+                        .padding(.vertical, 14)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [accentColors[accentColorChoice], accentColors[accentColorChoice].opacity(0.7)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(12)
+                        .shadow(color: accentColors[accentColorChoice].opacity(0.3), radius: 5, x: 0, y: 3)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .foregroundColor(.white)
-                .padding()
-                .background(Color.blue)
-                .cornerRadius(8)
-                .padding(.horizontal)
+            } header: {
+                SectionHeaderView(title: "ACTIONS", icon: "gearshape.fill")
             }
         }
         .navigationTitle("Appearance")
@@ -137,6 +199,68 @@ struct AppearanceSettingsView: View {
 
         // Notify the app to apply changes
         NotificationCenter.default.post(name: NSNotification.Name("AppearanceChanged"), object: nil)
+    }
+}
+
+// MARK: - Supporting Components
+
+// Удаляем дублирующее определение SectionHeaderView, так как оно уже объявлено в MoreView.swift
+
+struct SettingToggleRow: View {
+    var title: String
+    var icon: String
+    @Binding var isOn: Bool
+    var color: Color
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(color)
+                .frame(width: 28, height: 28)
+                .background(color.opacity(0.1))
+                .cornerRadius(6)
+            
+            Text(title)
+                .font(.system(size: 16, weight: .medium))
+            
+            Spacer()
+            
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+        }
+    }
+}
+
+struct ColorOptionView: View {
+    var color: Color
+    var name: String
+    var isSelected: Bool
+    
+    var body: some View {
+        VStack {
+            ZStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 50, height: 50)
+                    .shadow(color: color.opacity(0.5), radius: 3, x: 0, y: 2)
+                
+                if isSelected {
+                    Circle()
+                        .stroke(Color.white, lineWidth: 3)
+                        .frame(width: 50, height: 50)
+                    
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            
+            Text(name)
+                .font(.caption)
+                .foregroundColor(isSelected ? color : .secondary)
+                .fontWeight(isSelected ? .semibold : .regular)
+        }
     }
 }
 

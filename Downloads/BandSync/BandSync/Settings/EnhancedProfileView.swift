@@ -27,55 +27,78 @@ struct EnhancedProfileView: View {
     
     var body: some View {
         ZStack {
+            // Фоновый цвет
+            Color(.systemGray6)
+                .ignoresSafeArea()
+            
             if isLoading {
-                LoadingView(message: "Loading profile...")
+                EnhancedLoadingView(message: "Loading profile...")
             } else {
                 ScrollView {
-                    VStack(spacing: 20) {
-                        // Profile Image
-                        ProfileImageSection(
-                            profileImage: $profileImage,
-                            isUploading: $isUploadingImage,
-                            showOptions: $showPhotoOptions,
-                            showPicker: $showingImagePicker,
-                            photoSource: $photoSource,
-                            onImageUpload: uploadProfileImage
-                        )
-                        
-                        // Profile Information
-                        if isEditing {
-                            // Edit mode
-                            EditProfileSection(
-                                newName: $newName,
-                                newPhone: $newPhone,
-                                onCancel: { isEditing = false },
-                                onSave: saveProfile
-                            )
-                        } else {
-                            // View mode
-                            ProfileInfoSection(
-                                name: name,
-                                email: email,
-                                phone: phone,
-                                role: role,
-                                groupName: groupName,
-                                onEdit: {
-                                    newName = name
-                                    newPhone = phone
-                                    isEditing = true
+                    VStack(spacing: 24) {
+                        // Фоновый элемент шапки
+                        ZStack(alignment: .top) {
+                            // Верхний декоративный баннер
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.7)]), 
+                                        startPoint: .topLeading, 
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(height: 120)
+                                .cornerRadius(16, corners: [.bottomLeft, .bottomRight])
+                            
+                            // Профильное изображение с данными
+                            VStack(spacing: 0) {
+                                // Профильное изображение
+                                EnhancedProfileImageSection(
+                                    profileImage: $profileImage,
+                                    isUploading: $isUploadingImage,
+                                    showOptions: $showPhotoOptions,
+                                    showPicker: $showingImagePicker,
+                                    photoSource: $photoSource,
+                                    onImageUpload: uploadProfileImage
+                                )
+                                .padding(.top, 60)
+                                
+                                // Информация профиля
+                                if isEditing {
+                                    // Режим редактирования
+                                    EnhancedEditProfileSection(
+                                        newName: $newName,
+                                        newPhone: $newPhone,
+                                        onCancel: { isEditing = false },
+                                        onSave: saveProfile
+                                    )
+                                    .padding(.horizontal)
+                                    .padding(.top, 16)
+                                } else {
+                                    // Режим просмотра
+                                    EnhancedProfileInfoSection(
+                                        name: name,
+                                        email: email,
+                                        phone: phone,
+                                        role: role,
+                                        groupName: groupName,
+                                        onEdit: {
+                                            newName = name
+                                            newPhone = phone
+                                            isEditing = true
+                                        }
+                                    )
+                                    .padding(.horizontal)
+                                    .padding(.top, 16)
                                 }
-                            )
+                            }
                         }
                         
                         if let errorMessage = errorMessage {
-                            Text(errorMessage)
-                                .foregroundColor(.red)
-                                .padding()
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(8)
+                            ErrorMessageView(message: errorMessage)
+                                .padding(.horizontal)
                         }
                     }
-                    .padding()
                 }
                 .alert(isPresented: $showingSaveSuccess) {
                     Alert(
@@ -339,28 +362,100 @@ struct EnhancedProfileView: View {
 
 // MARK: - Supporting Components
 
-// Loading View
-struct LoadingView: View {
+// Улучшенный индикатор загрузки
+struct EnhancedLoadingView: View {
     var message: String
     
     var body: some View {
-        VStack {
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle())
-                .scaleEffect(1.5)
-                .padding()
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 8)
+                    .frame(width: 80, height: 80)
+                
+                Circle()
+                    .trim(from: 0, to: 0.7)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.5)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(Angle(degrees: 360))
+                    .animation(
+                        Animation.linear(duration: 1)
+                            .repeatForever(autoreverses: false),
+                        value: UUID()
+                    )
+            }
             
             Text(message)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text("Please wait")
                 .font(.subheadline)
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white.opacity(0.9))
+        .background(Color(.systemBackground).opacity(0.95))
     }
 }
 
-// Profile Image Section
-struct ProfileImageSection: View {
+// Отображение сообщения об ошибке
+struct ErrorMessageView: View {
+    var message: String
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title2)
+                .foregroundColor(.orange)
+            
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+            
+            Spacer()
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.orange.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+}
+
+// Расширение для скругления отдельных углов
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
+
+// Улучшенная секция изображения профиля
+struct EnhancedProfileImageSection: View {
     @Binding var profileImage: UIImage?
     @Binding var isUploading: Bool
     @Binding var showOptions: Bool
@@ -370,30 +465,45 @@ struct ProfileImageSection: View {
     
     var body: some View {
         ZStack {
-            // Profile image or placeholder
+            // Фон для изображения
+            Circle()
+                .fill(Color.white)
+                .frame(width: 134, height: 134)
+                .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
+            
+            // Профиль изображение или плейсхолдер
             Group {
                 if let image = profileImage {
                     Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                 } else {
-                    Image(systemName: "person.fill")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .padding(30)
-                        .foregroundColor(.white)
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.4)]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                        
+                        Image(systemName: "person.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .padding(30)
+                            .foregroundColor(.white)
+                    }
                 }
             }
             .frame(width: 120, height: 120)
-            .background(Color.blue.opacity(0.3))
             .clipShape(Circle())
             .overlay(
                 Circle()
                     .stroke(Color.white, lineWidth: 4)
-                    .shadow(radius: 3)
             )
             
-            // Edit button
+            // Кнопка редактирования
             VStack {
                 Spacer()
                 HStack {
@@ -401,30 +511,34 @@ struct ProfileImageSection: View {
                     Button(action: {
                         showOptions = true
                     }) {
-                        Image(systemName: "pencil.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.blue)
-                            .background(Color.white)
-                            .clipShape(Circle())
+                        ZStack {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 36, height: 36)
+                                .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                            
+                            Image(systemName: "pencil")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                        }
                     }
                     .disabled(isUploading)
+                    .offset(x: 12, y: 8)
                 }
             }
             .frame(width: 120, height: 120)
             
-            // Upload indicator overlay
+            // Индикатор загрузки
             if isUploading {
                 Circle()
                     .fill(Color.black.opacity(0.5))
                     .frame(width: 120, height: 120)
-                    .overlay(
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.5)
-                    )
+                
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
             }
         }
-        .padding(.vertical)
         .onChange(of: profileImage) { newImage in
             if newImage != nil && !isUploading {
                 onImageUpload()
@@ -433,8 +547,8 @@ struct ProfileImageSection: View {
     }
 }
 
-// Profile Info Section
-struct ProfileInfoSection: View {
+// Улучшенная информационная секция профиля
+struct EnhancedProfileInfoSection: View {
     var name: String
     var email: String
     var phone: String
@@ -443,91 +557,118 @@ struct ProfileInfoSection: View {
     var onEdit: () -> Void
     
     var body: some View {
-        VStack(spacing: 24) {
-            // User Info Card
-            VStack(spacing: 12) {
+        VStack(spacing: 20) {
+            // Основная информация
+            VStack(spacing: 8) {
                 Text(name)
-                    .font(.title)
-                    .bold()
+                    .font(.system(size: 24, weight: .bold))
                 
-                Text(role)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 12)
-                    .background(
-                        Capsule()
-                            .fill(Color.blue.opacity(0.1))
-                    )
-                
-                Text(groupName)
-                    .font(.caption)
-                    .foregroundColor(.gray)
+                // Роль
+                HStack(spacing: 8) {
+                    Text(role)
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.7)]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                        )
+                    
+                    Text(groupName)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(Color(.systemGray5))
+                        )
+                }
             }
-            .padding()
-            .frame(maxWidth: .infinity)
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
             
-            // Contact Info Card
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Contact Information")
-                    .font(.headline)
-                    .padding(.bottom, 4)
-                
-                ContactInfoRow(icon: "envelope", title: "Email", value: email)
+            // Контактная информация
+            VStack(spacing: 16) {
+                EnhancedContactCard(icon: "envelope.fill", title: "Email", value: email)
                 
                 if !phone.isEmpty {
-                    ContactInfoRow(icon: "phone", title: "Phone", value: phone)
+                    EnhancedContactCard(icon: "phone.fill", title: "Phone", value: phone)
                 }
             }
             .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+            )
+            .padding(.top, 8)
             
-            // Edit Button
+            // Кнопка редактирования
             Button(action: onEdit) {
-                Text("Edit Profile")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.blue)
-                    .cornerRadius(12)
+                HStack {
+                    Image(systemName: "pencil")
+                    Text("Edit Profile")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .foregroundColor(.white)
+                .cornerRadius(12)
+                .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
             }
-            .padding(.top, 16)
+            .padding(.top, 8)
         }
+        .padding(.bottom, 24)
     }
 }
 
-// Contact Info Row
-struct ContactInfoRow: View {
+// Карточка контактной информации
+struct EnhancedContactCard: View {
     var icon: String
     var title: String
     var value: String
     
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundColor(.blue)
-                .frame(width: 24)
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(.blue)
+            }
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.caption)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
                 
                 Text(value)
-                    .font(.callout)
+                    .font(.body)
             }
+            
+            Spacer()
         }
     }
 }
 
-// Edit Profile Section
-struct EditProfileSection: View {
+// Улучшенная секция редактирования профиля
+struct EnhancedEditProfileSection: View {
     @Binding var newName: String
     @Binding var newPhone: String
     var onCancel: () -> Void
@@ -535,62 +676,102 @@ struct EditProfileSection: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // Form Fields
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Edit Profile")
+            // Заголовок
+            HStack {
+                Text("Edit Your Profile")
                     .font(.headline)
-                    .padding(.bottom, 4)
+                    .bold()
                 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Name")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                    
-                    TextField("Your name", text: $newName)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                }
+                Spacer()
+            }
+            .padding(.bottom, 8)
+            
+            // Поля ввода
+            VStack(spacing: 16) {
+                EnhancedInputField(
+                    title: "Full Name",
+                    placeholder: "Enter your name",
+                    text: $newName,
+                    icon: "person.fill"
+                )
                 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Phone")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                    
-                    TextField("Your phone number", text: $newPhone)
-                        .keyboardType(.phonePad)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                }
+                EnhancedInputField(
+                    title: "Phone Number",
+                    placeholder: "Enter your phone number",
+                    text: $newPhone,
+                    icon: "phone.fill",
+                    keyboardType: .phonePad
+                )
             }
             .padding()
-            .background(Color.white)
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+            )
             
-            // Action Buttons
+            // Кнопки действий
             HStack(spacing: 16) {
                 Button(action: onCancel) {
                     Text("Cancel")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .padding()
+                        .fontWeight(.medium)
                         .frame(maxWidth: .infinity)
-                        .background(Color.red.opacity(0.1))
+                        .padding()
+                        .background(Color(.systemGray5))
+                        .foregroundColor(.primary)
                         .cornerRadius(12)
                 }
                 
                 Button(action: onSave) {
                     Text("Save Changes")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding()
+                        .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
-                        .background(Color.blue)
+                        .padding()
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .foregroundColor(.white)
                         .cornerRadius(12)
+                        .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
                 }
             }
+            .padding(.top, 16)
+        }
+        .padding(.bottom, 24)
+    }
+}
+
+// Поле ввода
+struct EnhancedInputField: View {
+    var title: String
+    var placeholder: String
+    @Binding var text: String
+    var icon: String
+    var keyboardType: UIKeyboardType = .default
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(.blue)
+                
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            HStack {
+                TextField(placeholder, text: $text)
+                    .keyboardType(keyboardType)
+                    .font(.body)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
         }
     }
 }

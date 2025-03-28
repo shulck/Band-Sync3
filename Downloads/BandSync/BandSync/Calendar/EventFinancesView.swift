@@ -6,66 +6,133 @@ struct EventFinancesView: View {
     var event: Event
     @State private var finances: [FinanceRecord] = []
     @State private var isLoading = true
+    @State private var errorMessage: String? = nil
     @State private var showingAddTransactionSheet = false
-    
-    
+
     var body: some View {
         VStack {
             if isLoading {
-                ProgressView("Загрузка финансовых данных...")
+                ProgressView(LocalizedStringKey("loading_data"))
+                    .padding()
+            } else if let error = errorMessage {
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 50))
+                        .foregroundColor(.orange)
+                        .shadow(color: Color.orange.opacity(0.3), radius: 4, x: 0, y: 2)
+
+                    Text(LocalizedStringKey("error"))
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text(error)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+
+                    Button(LocalizedStringKey("try_again")) {
+                        errorMessage = nil
+                        fetchEventFinances()
+                    }
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 12)
+                    .background(Color.blue.gradient)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                    .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .padding()
             } else if finances.isEmpty {
                 VStack(spacing: 20) {
                     Image(systemName: "dollarsign.circle")
-                        .font(.system(size: 50))
-                        .foregroundColor(.gray)
-                    
+                        .font(.system(size: 60))
+                        .foregroundStyle(
+                            .linearGradient(colors: [.blue, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                        .shadow(color: Color.blue.opacity(0.2), radius: 5, x: 0, y: 3)
+
                     Text("Нет финансовых записей для этого события")
-                        .font(.headline)
-                    
+                        .font(.title3)
+                        .fontWeight(.semibold)
+
                     Text("Добавьте доходы или расходы, связанные с этим событием")
                         .multilineTextAlignment(.center)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                         .padding(.horizontal)
-                    
+                        .frame(maxWidth: 300)
+
                     Button(action: {
                         showingAddTransactionSheet = true
                     }) {
-                        Text("Добавить транзакцию")
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 16))
+                            Text("Добавить транзакцию")
+                        }
+                        .padding()
+                        .frame(minWidth: 200)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .cornerRadius(15)
+                        .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 2)
                     }
                 }
+                .padding(30)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+                )
                 .padding()
             } else {
                 VStack {
                     // Финансовая сводка
                     FinancialSummaryCard(finances: finances)
                         .padding()
-                    
+
                     // Список транзакций
                     List {
                         ForEach(finances) { record in
                             FinanceRecordRow(record: record)
                         }
                     }
-                    
+
                     Button(action: {
                         showingAddTransactionSheet = true
                     }) {
-                        Text("Добавить транзакцию")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Добавить транзакцию")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(
+                            LinearGradient(gradient:
+                                Gradient(colors: [Color.blue, Color.blue.opacity(0.8)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .cornerRadius(15)
+                        .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 2)
                     }
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.bottom, 10)
                 }
             }
         }
-        .navigationTitle("Финансы события")
+        .navigationTitle(LocalizedStringKey("event_finances"))
         .onAppear {
             fetchEventFinances()
         }
@@ -76,24 +143,25 @@ struct EventFinancesView: View {
             }
         }
     }
-    
+
     private func fetchEventFinances() {
         isLoading = true
-        
+        errorMessage = nil
+
         let db = Firestore.firestore()
         db.collection("finances")
             .whereField("eventId", isEqualTo: event.id)
             .getDocuments { snapshot, error in
                 isLoading = false
-                
+
                 if let error = error {
-                    print("Error fetching event finances: \(error.localizedDescription)")
+                    errorMessage = "Error: \(error.localizedDescription)"
                     return
                 }
-                
+
                 finances = snapshot?.documents.compactMap { document -> FinanceRecord? in
                     let data = document.data()
-                    
+
                     guard let typeString = data["type"] as? String,
                           let amount = data["amount"] as? Double,
                           let currency = data["currency"] as? String,
@@ -102,7 +170,7 @@ struct EventFinancesView: View {
                           let timestamp = data["date"] as? Timestamp else {
                         return nil
                     }
-                    
+
                     let type: FinanceType = typeString == "income" ? .income : .expense
                     let date = timestamp.dateValue()
                     let receiptImageURL = data["receiptImageURL"] as? String
@@ -110,7 +178,7 @@ struct EventFinancesView: View {
                     let eventTitle = data["eventTitle"] as? String
                     let subcategory = data["subcategory"] as? String
                     let tags = data["tags"] as? [String]
-                    
+
                     return FinanceRecord(
                         id: document.documentID,
                         type: type,
@@ -132,19 +200,19 @@ struct EventFinancesView: View {
 
 struct FinancialSummaryCard: View {
     var finances: [FinanceRecord]
-    
+
     var totalIncome: Double {
         finances.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
     }
-    
+
     var totalExpenses: Double {
         finances.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
     }
-    
+
     var profit: Double {
         totalIncome - totalExpenses
     }
-    
+
     var mainCurrency: String {
         // Определяем основную валюту по большинству записей
         let currencies = finances.map { $0.currency }
@@ -152,58 +220,81 @@ struct FinancialSummaryCard: View {
             currencies.filter { $0 == a }.count < currencies.filter { $0 == b }.count
         } ?? "USD"
     }
-    
+
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 15) {
             Text("Финансовая сводка")
                 .font(.headline)
+                .fontWeight(.bold)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            
+                .foregroundColor(.primary)
+
             HStack(spacing: 20) {
                 // Доходы
-                VStack {
+                VStack(spacing: 6) {
                     Text("Доходы")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                     Text(formatMoney(totalIncome, currency: mainCurrency))
                         .foregroundColor(.green)
                         .font(.headline)
+                        .fontWeight(.bold)
                 }
                 .frame(maxWidth: .infinity)
-                
+                .padding(.vertical, 10)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(10)
+
                 // Расходы
-                VStack {
+                VStack(spacing: 6) {
                     Text("Расходы")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                     Text(formatMoney(totalExpenses, currency: mainCurrency))
                         .foregroundColor(.red)
                         .font(.headline)
+                        .fontWeight(.bold)
                 }
                 .frame(maxWidth: .infinity)
-                
+                .padding(.vertical, 10)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(10)
+
                 // Прибыль
-                VStack {
+                VStack(spacing: 6) {
                     Text("Прибыль")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                     Text(formatMoney(profit, currency: mainCurrency))
                         .foregroundColor(profit >= 0 ? .green : .red)
                         .font(.headline)
+                        .fontWeight(.bold)
                 }
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(profit >= 0 ? Color.green.opacity(0.1) : Color.red.opacity(0.1))
+                .cornerRadius(10)
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(
+                    Color(.systemBackground)
+                )
+                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(Color(.systemGray5), lineWidth: 1)
+        )
     }
-    
+
     private func formatMoney(_ amount: Double, currency: String) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = currency
-        
+
         return formatter.string(from: NSNumber(value: amount)) ?? "\(amount) \(currency)"
     }
 }
@@ -212,7 +303,7 @@ struct EventTransactionView: View {
     @Environment(\.presentationMode) var presentationMode
     var event: Event
     var onAdd: (FinanceRecord) -> Void
-    
+
     @State private var transactionType: FinanceType = .income
     @State private var amount = ""
     @State private var description = ""
@@ -223,12 +314,12 @@ struct EventTransactionView: View {
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var subcategory = ""
-    
+
     let currencies = ["USD", "EUR", "UAH"]
     let incomeCategories = ["Gig", "Merchandise", "Royalties", "Sponsorship", "Other"]
     let expenseCategories = ["Logistics", "Accommodation", "Food", "Equipment", "Promotion", "Fees", "Other"]
     let merchandiseSubcategories = ["T-Shirts", "Hoodies", "Hats", "Pins/Stickers", "CDs/Vinyl", "Posters", "Other"]
-    
+
     var body: some View {
         NavigationView {
             Form {
@@ -239,21 +330,22 @@ struct EventTransactionView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                 }
-                
+
                 Section(header: Text("Информация о событии")) {
                     HStack {
                         Image(systemName: event.icon == "📅" ? "calendar" : "music.note")
                         Text(event.title)
                             .font(.headline)
                     }
-                    
+
                     HStack {
                         Text("Дата:")
                         Spacer()
                         Text(formattedDate(event.date))
                             .foregroundColor(.secondary)
+                            .multilineTextAlignment(.trailing)
                     }
-                    
+
                     HStack {
                         Text("Место:")
                         Spacer()
@@ -262,25 +354,25 @@ struct EventTransactionView: View {
                             .multilineTextAlignment(.trailing)
                     }
                 }
-                
+
                 Section(header: Text("Детали транзакции")) {
                     TextField("Сумма", text: $amount)
                         .keyboardType(.decimalPad)
-                    
+
                     Picker("Валюта", selection: $currency) {
                         ForEach(currencies, id: \.self) { currency in
                             Text(currency).tag(currency)
                         }
                     }
-                    
+
                     TextField("Описание", text: $description)
-                    
+
                     Picker("Категория", selection: $category) {
                         ForEach(transactionType == .income ? incomeCategories : expenseCategories, id: \.self) { category in
                             Text(category).tag(category)
                         }
                     }
-                    
+
                     if category == "Merchandise" {
                         Picker("Подкатегория", selection: $subcategory) {
                             Text("None").tag("")
@@ -290,7 +382,7 @@ struct EventTransactionView: View {
                         }
                     }
                 }
-                
+
                 Section(header: Text("Чек/Квитанция")) {
                     Button(action: {
                         showImagePicker = true
@@ -304,22 +396,22 @@ struct EventTransactionView: View {
                             }
                         }
                     }
-                    
-                    if receiptImage != nil {
-                        Image(uiImage: receiptImage!)
+
+                    if let receiptImage = receiptImage {
+                        Image(uiImage: receiptImage)
                             .resizable()
                             .scaledToFit()
                             .frame(height: 200)
                     }
                 }
-                
+
                 if let errorMessage = errorMessage {
                     Section {
                         Text(errorMessage)
                             .foregroundColor(.red)
                     }
                 }
-                
+
                 Section {
                     Button(action: saveTransaction) {
                         if isUploading {
@@ -340,7 +432,7 @@ struct EventTransactionView: View {
             }
         }
     }
-    
+
     private var isFormValid: Bool {
         let validationResult = FinanceValidator.validateFinanceRecord(
             amount: amount,
@@ -349,23 +441,23 @@ struct EventTransactionView: View {
             category: category,
             type: transactionType
         )
-        
+
         if !validationResult.isValid && errorMessage == nil {
             errorMessage = validationResult.error
         }
-        
+
         return validationResult.isValid
     }
-    
+
     private func saveTransaction() {
         guard let amountValue = Double(amount) else {
             errorMessage = "Пожалуйста, введите корректную сумму"
             return
         }
-        
+
         isUploading = true
         errorMessage = nil
-        
+
         if let image = receiptImage {
             ImageUploadService.uploadImage(image) { result in
                 switch result {
@@ -382,15 +474,15 @@ struct EventTransactionView: View {
             createRecord(receiptURL: nil)
         }
     }
-    
+
     private func createRecord(receiptURL: String?) {
         guard let amountValue = Double(amount) else {
             isUploading = false
             return
         }
-        
+
         let db = Firestore.firestore()
-        
+
         // Создаем новую запись
         let record = FinanceRecord(
             id: UUID().uuidString,
@@ -406,7 +498,7 @@ struct EventTransactionView: View {
             subcategory: category == "Merchandise" && !subcategory.isEmpty ? subcategory : nil,
             tags: nil
         )
-        
+
         // Сохраняем в Firebase
         var data: [String: Any] = [
             "type": transactionType == .income ? "income" : "expense",
@@ -418,26 +510,26 @@ struct EventTransactionView: View {
             "eventId": event.id,
             "eventTitle": event.title
         ]
-        
+
         if let receiptImageURL = receiptURL {
             data["receiptImageURL"] = receiptImageURL
         }
-        
+
         if category == "Merchandise" && !subcategory.isEmpty {
             data["subcategory"] = subcategory
         }
-        
+
         if let user = Auth.auth().currentUser {
             data["userId"] = user.uid
             data["createdBy"] = user.displayName ?? user.email ?? "Unknown"
         }
-        
+
         db.collection("finances").document(record.id).setData(data) { error in
             DispatchQueue.main.async {
-                isUploading = false
-                
+                self.isUploading = false
+
                 if let error = error {
-                    errorMessage = "Ошибка: \(error.localizedDescription)"
+                    self.errorMessage = "Ошибка: \(error.localizedDescription)"
                 } else {
                     onAdd(record)
                     presentationMode.wrappedValue.dismiss()
@@ -445,7 +537,7 @@ struct EventTransactionView: View {
             }
         }
     }
-    
+
     private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium

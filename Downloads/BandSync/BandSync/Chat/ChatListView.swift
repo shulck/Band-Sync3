@@ -29,26 +29,34 @@ struct ChatListView: View {
                         .padding()
                 } else if chatService.chatRooms.isEmpty {
                     VStack(spacing: 20) {
-                        Image(systemName: "message.circle")
-                            .font(.system(size: 72))
-                            .foregroundColor(.gray)
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(Color.blue.opacity(0.8))
+                            .shadow(color: .blue.opacity(0.3), radius: 10, x: 0, y: 4)
 
                         Text("У вас пока нет чатов")
-                            .font(.headline)
+                            .font(.title2)
+                            .fontWeight(.semibold)
 
                         Text("Создайте новый чат, чтобы начать общение")
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
+                            .font(.subheadline)
 
                         Button(action: {
                             showingNewChatView = true
                         }) {
-                            Text("Создать новый чат")
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Создать новый чат")
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .background(LinearGradient(gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.7)]), startPoint: .leading, endPoint: .trailing))
+                            .foregroundColor(.white)
+                            .cornerRadius(25)
+                            .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
                         }
                         .padding(.top)
                     }
@@ -57,33 +65,42 @@ struct ChatListView: View {
                     List {
                         ForEach(filteredChatRooms) { chatRoom in
                             NavigationLink(destination: ChatView(chatRoom: chatRoom)) {
-                                HStack {
-                                    // Аватар чата (иконка группы или индивидуальная)
+                                HStack(spacing: 12) {
+                                    // Аватар чата с улучшенным дизайном
                                     ZStack {
+                                        Circle()
+                                            .fill(LinearGradient(
+                                                gradient: Gradient(colors: [Color.blue.opacity(0.8), Color.blue]),
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ))
+                                            .frame(width: 50, height: 50)
+                                            .shadow(color: Color.blue.opacity(0.3), radius: 3, x: 0, y: 2)
+
                                         Image(systemName: chatRoom.isGroupChat ? "person.3.fill" : "person.fill")
                                             .foregroundColor(.white)
-                                            .frame(width: 40, height: 40)
-                                            .background(Circle().fill(Color.blue))
+                                            .font(.system(size: chatRoom.isGroupChat ? 20 : 24))
 
                                         // Индикатор непрочитанных сообщений
                                         if let unreadCount = unreadCounts[chatRoom.id], unreadCount > 0 {
                                             ZStack {
                                                 Circle()
                                                     .fill(Color.red)
-                                                    .frame(width: 20, height: 20)
+                                                    .frame(width: 22, height: 22)
+                                                    .shadow(color: Color.red.opacity(0.5), radius: 2, x: 0, y: 1)
 
                                                 Text("\(unreadCount)")
-                                                    .font(.caption2)
+                                                    .font(.caption2.bold())
                                                     .foregroundColor(.white)
-                                                    .fontWeight(.bold)
                                             }
-                                            .offset(x: 15, y: -15)
+                                            .offset(x: 18, y: -18)
                                         }
                                     }
 
-                                    VStack(alignment: .leading) {
+                                    VStack(alignment: .leading, spacing: 4) {
                                         Text(chatRoom.name)
                                             .font(.headline)
+                                            .fontWeight(.semibold)
 
                                         if let lastMessage = chatRoom.lastMessage {
                                             Text(lastMessage)
@@ -95,29 +112,35 @@ struct ChatListView: View {
 
                                     Spacer()
 
-                                    if let date = chatRoom.lastMessageDate {
-                                        Text(formatDate(date))
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                                .contextMenu {
-                                    if chatRoom.isGroupChat {
-                                        Button(action: {
-                                            chatToEdit = chatRoom
-                                            editChatName = chatRoom.name
-                                        }) {
-                                            Label("Редактировать", systemImage: "pencil")
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        if let date = chatRoom.lastMessageDate {
+                                            Text(formatDate(date))
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 2)
+                                                .background(Color.gray.opacity(0.1))
+                                                .cornerRadius(10)
                                         }
                                     }
-
-                                    Button(role: .destructive, action: {
-                                        chatToDelete = chatRoom
-                                        showDeleteAlert = true
+                                }
+                                .padding(.vertical, 8)
+                            }
+                            .contextMenu {
+                                if chatRoom.isGroupChat {
+                                    Button(action: {
+                                        chatToEdit = chatRoom
+                                        editChatName = chatRoom.name
                                     }) {
-                                        Label("Удалить", systemImage: "trash")
+                                        Label("Редактировать", systemImage: "pencil")
                                     }
+                                }
+
+                                Button(role: .destructive, action: {
+                                    chatToDelete = chatRoom
+                                    showDeleteAlert = true
+                                }) {
+                                    Label("Удалить", systemImage: "trash")
                                 }
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -148,16 +171,13 @@ struct ChatListView: View {
                 }
             }
             .navigationTitle("Чаты")
-            .searchable(text: $searchText, prompt: "Поиск чатов")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingNewChatView = true
-                    }) {
-                        Image(systemName: "square.and.pencil")
-                    }
-                }
-            }
+            .navigationBarItems(trailing: Button(action: {
+                showingNewChatView = true
+            }) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 18, weight: .semibold))
+            })
+
             .sheet(isPresented: $showingNewChatView) {
                 NewChatView(chatService: chatService)
             }

@@ -15,75 +15,87 @@ struct MoreView: View {
         // поскольку он уже есть в MainTabView
         List {
             // MARK: - Group Section
-            Section(header: Text("GROUP: \(groupName)")) {
+            Section {
                 NavigationLink(destination: ProfileViewWrapper()) {
-                    MoreMenuRow(icon: "person.circle", title: "Profile")
+                    MoreMenuRow(icon: "person.circle.fill", title: "Profile")
                 }
                 
                 NavigationLink(destination: AccountSettingsViewWrapper()) {
-                    MoreMenuRow(icon: "gear", title: "Account Settings")
+                    MoreMenuRow(icon: "gearshape.fill", title: "Account Settings")
                 }
                 
                 if userRole == "Admin" {
                     NavigationLink(destination: AdminPanelViewWrapper()) {
-                        MoreMenuRow(icon: "person.3", title: "Group Management")
+                        MoreMenuRow(icon: "person.3.fill", title: "Group Management")
                     }
                 }
+            } header: {
+                SectionHeaderView(title: "GROUP: \(groupName)")
             }
             
             // MARK: - Management Section
-            Section(header: Text("MANAGEMENT")) {
+            Section {
                 NavigationLink(destination: TasksViewWrapper()) {
-                    MoreMenuRow(icon: "checkmark.circle", title: "Tasks")
+                    MoreMenuRow(icon: "checkmark.circle.fill", title: "Tasks")
                 }
+            } header: {
+                SectionHeaderView(title: "MANAGEMENT")
             }
             
             // MARK: - Application Section
-            Section(header: Text("APPLICATION")) {
+            Section {
                 NavigationLink(destination: NotificationsSettingsViewWrapper()) {
-                    MoreMenuRow(icon: "bell", title: "Notifications")
+                    MoreMenuRow(icon: "bell.fill", title: "Notifications")
                 }
                 
                 NavigationLink(destination: AppearanceSettingsViewWrapper()) {
-                    MoreMenuRow(icon: "paintbrush", title: "Appearance")
+                    MoreMenuRow(icon: "paintbrush.fill", title: "Appearance")
                 }
                 
                 NavigationLink(destination: LanguageSettingsViewWrapper()) {
                     MoreMenuRow(icon: "globe", title: "Language")
                 }
+            } header: {
+                SectionHeaderView(title: "APPLICATION")
             }
             
             // MARK: - Support Section
-            Section(header: Text("SUPPORT")) {
+            Section {
                 NavigationLink(destination: HelpCenterViewWrapper()) {
-                    MoreMenuRow(icon: "questionmark.circle", title: "Help Center")
+                    MoreMenuRow(icon: "questionmark.circle.fill", title: "Help Center")
                 }
                 
                 NavigationLink(destination: AboutViewWrapper()) {
-                    MoreMenuRow(icon: "info.circle", title: "About")
+                    MoreMenuRow(icon: "info.circle.fill", title: "About")
                 }
                 
                 Button(action: {
                     showLogoutConfirmation = true
                 }) {
-                    MoreMenuRow(icon: "rectangle.portrait.and.arrow.right", title: "Logout", color: .red)
+                    MoreMenuRow(icon: "rectangle.portrait.and.arrow.right.fill", title: "Logout", color: .red)
                 }
+            } header: {
+                SectionHeaderView(title: "SUPPORT")
             }
             
             // MARK: - Group Code Section (Only visible for admins)
             if userRole == "Admin" && !groupId.isEmpty {
-                Section(header: Text("GROUP INFORMATION")) {
-                    VStack(alignment: .leading) {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("Group Code")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        GroupCodeView(groupId: groupId)
+                        EnhancedGroupCodeView(groupId: groupId)
                     }
+                    .padding(.vertical, 4)
+                } header: {
+                    SectionHeaderView(title: "GROUP INFORMATION")
                 }
             }
         }
-        .listStyle(GroupedListStyle())
+        .listStyle(InsetGroupedListStyle())
+        .background(Color(.systemGroupedBackground).edgesIgnoringSafeArea(.all))
         .background(
             NavigationLink(
                 destination: ContentView().navigationBarHidden(true),
@@ -125,30 +137,64 @@ struct MoreView: View {
 
 // MARK: - Supporting Components
 
-// Row component for menu items
+// Enhanced section header design
+struct SectionHeaderView: View {
+    var title: String
+    var icon: String? = nil
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            if let icon = icon {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(.blue)
+            }
+            
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.secondary)
+                .tracking(0.8)
+                .padding(.bottom, 4)
+        }
+    }
+}
+
+// Row component for menu items with enhanced design
 struct MoreMenuRow: View {
     var icon: String
     var title: String
     var color: Color = .blue
     
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(color)
-                .frame(width: 24, height: 24)
+        HStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(color)
+            }
             
             Text(title)
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(color == .blue ? .primary : color)
             
             Spacer()
+            
+            if color == .blue {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color(.systemGray3))
+            }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 }
 
-// Group code component with improved error handling and UX
-struct GroupCodeView: View {
+// Enhanced group code component with improved design
+struct EnhancedGroupCodeView: View {
     let groupId: String
     @State private var groupCode: String = ""
     @State private var isLoading = true
@@ -157,42 +203,73 @@ struct GroupCodeView: View {
     @State private var errorMessage = ""
     
     var body: some View {
-        HStack {
+        VStack(spacing: 12) {
             if isLoading {
-                ProgressView()
-                    .frame(height: 40)
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .scaleEffect(1.2)
+                        .padding()
+                    Spacer()
+                }
+                .frame(height: 60)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
             } else if hasError {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Error loading code")
-                        .foregroundColor(.red)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Error loading code")
+                            .font(.headline)
+                            .foregroundColor(.red)
+                    }
+                    
                     Text(errorMessage)
                         .font(.caption)
-                        .foregroundColor(.red)
-                    Button("Retry") {
-                        loadGroupCode()
-                    }
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                }
-            } else {
-                Text(groupCode)
-                    .font(.system(.body, design: .monospaced))
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.2))
-                    .cornerRadius(6)
-                
-                Spacer()
-                
-                Button(action: {
-                    isSharePresented = true
-                }) {
-                    Image(systemName: "square.and.arrow.up")
-                        .foregroundColor(.blue)
-                        .padding(8)
+                        .foregroundColor(.secondary)
+                    
+                    Button(action: { loadGroupCode() }) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Retry")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
                         .background(Color.blue.opacity(0.1))
-                        .cornerRadius(6)
+                        .foregroundColor(.blue)
+                        .cornerRadius(8)
+                    }
+                    .padding(.top, 4)
                 }
-                .disabled(hasError)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+            } else {
+                HStack {
+                    Text(groupCode)
+                        .font(.system(.body, design: .monospaced, weight: .bold))
+                        .padding(12)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(.systemGray6))
+                        )
+                    
+                    Button(action: {
+                        isSharePresented = true
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.blue)
+                            )
+                    }
+                    .disabled(hasError)
+                }
             }
         }
         .onAppear(perform: loadGroupCode)

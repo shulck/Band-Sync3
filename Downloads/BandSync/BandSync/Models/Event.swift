@@ -31,14 +31,23 @@ struct Event: Identifiable, Codable {
     var hotel: Hotel
     var fee: String
     var setlist: [String]
-    var setlistId: String?      // ID сетлиста
-    var setlistName: String?    // Название сетлиста (кэшированное)
+    var setlistId: String?      // Добавьте это поле
+    var setlistName: String?    // И это поле
     var notes: String
     var schedule: [DailyScheduleItem]
-    var isPersonal: Bool = false  
+    var isPersonal: Bool = false
+    
+    // Поля для повторяющихся событий
+    var isRecurring: Bool = false
+    var recurrenceType: String? = nil // "daily", "weekly", "monthly", "yearly"
+    var recurrenceEndDate: Date? = nil
+    var recurrenceInterval: Int = 1
+    var recurrenceParentId: String? = nil
+    var recurrenceDaysOfWeek: [Int]? = nil // для еженедельных повторений (1 = понедельник, 7 = воскресенье)
 
     enum CodingKeys: String, CodingKey {
-        case id, title, date, type, status, location, organizer, coordinator, hotel, fee, setlist, notes, schedule
+        case id, title, date, type, status, location, organizer, coordinator, hotel, fee, setlist, notes, schedule, isPersonal
+        case isRecurring, recurrenceType, recurrenceEndDate, recurrenceInterval, recurrenceParentId, recurrenceDaysOfWeek
     }
 
     init(id: String = UUID().uuidString,
@@ -52,11 +61,15 @@ struct Event: Identifiable, Codable {
          hotel: Hotel,
          fee: String,
          setlist: [String] = [],
-         setlistId: String? = nil,     // Добавь этот параметр
-         setlistName: String? = nil,   // И этот
          notes: String = "",
          isPersonal: Bool = false,
-         schedule: [DailyScheduleItem] = []) {
+         schedule: [DailyScheduleItem] = [],
+         isRecurring: Bool = false,
+         recurrenceType: String? = nil,
+         recurrenceEndDate: Date? = nil,
+         recurrenceInterval: Int = 1,
+         recurrenceParentId: String? = nil,
+         recurrenceDaysOfWeek: [Int]? = nil) {
         self.id = id
         self.title = title
         self.date = date
@@ -68,11 +81,15 @@ struct Event: Identifiable, Codable {
         self.hotel = hotel
         self.fee = fee
         self.setlist = setlist
-        self.setlistId = setlistId
-        self.setlistName = setlistName
         self.notes = notes
         self.schedule = schedule
         self.isPersonal = isPersonal
+        self.isRecurring = isRecurring
+        self.recurrenceType = recurrenceType
+        self.recurrenceEndDate = recurrenceEndDate
+        self.recurrenceInterval = recurrenceInterval
+        self.recurrenceParentId = recurrenceParentId
+        self.recurrenceDaysOfWeek = recurrenceDaysOfWeek
     }
 
     init(from decoder: Decoder) throws {
@@ -91,6 +108,17 @@ struct Event: Identifiable, Codable {
         setlist = try container.decode([String].self, forKey: .setlist)
         notes = try container.decode(String.self, forKey: .notes)
         schedule = try container.decode([DailyScheduleItem].self, forKey: .schedule)
+        isPersonal = try container.decodeIfPresent(Bool.self, forKey: .isPersonal) ?? false
+        
+        // Декодирование полей повторяющихся событий
+        isRecurring = try container.decodeIfPresent(Bool.self, forKey: .isRecurring) ?? false
+        recurrenceType = try container.decodeIfPresent(String.self, forKey: .recurrenceType)
+        if let recurrenceEndTimestamp = try container.decodeIfPresent(Timestamp.self, forKey: .recurrenceEndDate) {
+            recurrenceEndDate = recurrenceEndTimestamp.dateValue()
+        }
+        recurrenceInterval = try container.decodeIfPresent(Int.self, forKey: .recurrenceInterval) ?? 1
+        recurrenceParentId = try container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
+        recurrenceDaysOfWeek = try container.decodeIfPresent([Int].self, forKey: .recurrenceDaysOfWeek)
     }
 
     // Convenient initializer for creating an object from Firestore data
@@ -143,6 +171,7 @@ struct Event: Identifiable, Codable {
         self.fee = fee
         self.setlist = data["setlist"] as? [String] ?? []
         self.notes = data["notes"] as? String ?? ""
+        self.isPersonal = data["isPersonal"] as? Bool ?? false
 
         // Парсинг расписания
         var scheduleItems: [DailyScheduleItem] = []
@@ -155,6 +184,14 @@ struct Event: Identifiable, Codable {
             }
         }
         self.schedule = scheduleItems
+        
+        // Парсинг полей повторяющегося события
+        self.isRecurring = data["isRecurring"] as? Bool ?? false
+        self.recurrenceType = data["recurrenceType"] as? String
+        self.recurrenceEndDate = (data["recurrenceEndDate"] as? Timestamp)?.dateValue()
+        self.recurrenceInterval = data["recurrenceInterval"] as? Int ?? 1
+        self.recurrenceParentId = data["recurrenceParentId"] as? String
+        self.recurrenceDaysOfWeek = data["recurrenceDaysOfWeek"] as? [Int]
     }
 
     var asDictionary: [String: Any] {
@@ -168,6 +205,7 @@ struct Event: Identifiable, Codable {
             "fee": fee,
             "notes": notes,
             "setlist": setlist,
+            "isPersonal": isPersonal,
             "organizer": [
                 "name": organizer.name,
                 "phone": organizer.phone,
@@ -183,21 +221,35 @@ struct Event: Identifiable, Codable {
                 "checkIn": hotel.checkIn,
                 "checkOut": hotel.checkOut
             ],
-            "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] },
-            "isPersonal": isPersonal
+            "schedule": schedule.map { ["time": $0.time, "activity": $0.activity, "id": $0.id] }
         ]
         
-        // Теперь добавим новые поля, если они не nil
-        if let setlistId = setlistId {
-            dict["setlistId"] = setlistId
-        }
-        
-        if let setlistName = setlistName {
-            dict["setlistName"] = setlistName
+        // Добавляем поля для повторяющихся событий
+        dict["isRecurring"] = isRecurring
+
+        if isRecurring {
+            if let recurrenceType = recurrenceType {
+                dict["recurrenceType"] = recurrenceType
+            }
+            
+            if let recurrenceEndDate = recurrenceEndDate {
+                dict["recurrenceEndDate"] = Timestamp(date: recurrenceEndDate)
+            }
+            
+            dict["recurrenceInterval"] = recurrenceInterval
+            
+            if let recurrenceParentId = recurrenceParentId {
+                dict["recurrenceParentId"] = recurrenceParentId
+            }
+            
+            if let recurrenceDaysOfWeek = recurrenceDaysOfWeek {
+                dict["recurrenceDaysOfWeek"] = recurrenceDaysOfWeek
+            }
         }
         
         return dict
     }
+
     // Возвращает иконку в зависимости от типа события
     var icon: String {
         switch type {

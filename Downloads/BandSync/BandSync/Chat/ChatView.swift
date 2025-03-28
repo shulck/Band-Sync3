@@ -18,7 +18,7 @@ struct ChatView: View {
     }
 
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
             // Сообщения
             ScrollViewReader { scrollView in
                 ScrollView {
@@ -32,14 +32,18 @@ struct ChatView: View {
                             } else {
                                 Text("Загрузить предыдущие сообщения")
                                     .foregroundColor(.blue)
-                                    .padding()
+                                    .font(.system(size: 14, weight: .medium))
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 16)
+                                    .background(Color.blue.opacity(0.1))
+                                    .cornerRadius(16)
                             }
                         }
                         .disabled(chatService.isLoading)
-                        .padding(.top, 8)
+                        .padding(.top, 12)
                     }
 
-                    LazyVStack(spacing: 8) {
+                    LazyVStack(spacing: 12) {
                         ForEach(chatService.messages) { message in
                             MessageBubble(
                                 message: message,
@@ -66,7 +70,7 @@ struct ChatView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.top, 8)
+                    .padding(.vertical, 10)
                 }
                 .onChange(of: chatService.messages.count) { _ in
                     // Автоскролл к последнему сообщению только при первой загрузке
@@ -77,59 +81,120 @@ struct ChatView: View {
                         }
                     }
                 }
+                .background(Color(.systemGroupedBackground))
             }
 
             // Форма отправки сообщения
             if isCurrentUserInChat {
                 VStack(spacing: 0) {
+                    Divider()
+
                     // Сообщение об ошибке, если есть
                     if !chatService.errorMessage.isEmpty {
                         Text(chatService.errorMessage)
-                            .foregroundColor(.red)
+                            .foregroundColor(.white)
                             .font(.caption)
-                            .padding(.horizontal)
-                            .padding(.top, 4)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.red.opacity(0.9))
+                            .cornerRadius(8)
+                            .padding(.top, 8)
                     }
 
-                    HStack {
+                    // Обновляем нашу форму ввода сообщения
+                    HStack(spacing: 8) { // Уменьшаем расстояние между элементами
                         // Кнопка выбора смайликов
                         Button(action: {
                             showEmojiPicker.toggle()
                         }) {
                             Image(systemName: "face.smiling")
-                                .font(.system(size: 20))
-                                .foregroundColor(.blue)
-                                .padding(8)
+                                .font(.system(size: 20)) // Уменьшаем размер
+                                .foregroundColor(showEmojiPicker ? .blue : .gray)
+                                .padding(6) // Меньше отступы
+                                .background(showEmojiPicker ? Color.blue.opacity(0.1) : Color.clear)
+                                .clipShape(Circle())
                         }
 
-                        TextField(editingMessage != nil ? "Редактировать..." : "Сообщение...", text: $messageText)
-                            .padding(10)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(20)
+                        // Делаем поле ввода максимально компактным
+                        ZStack(alignment: .leading) {
+                            if messageText.isEmpty {
+                                Text(editingMessage != nil ? "Редактировать..." : "Сообщение...")
+                                    .foregroundColor(Color(.placeholderText))
+                                    .font(.body)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                            }
 
+                            // Упрощаем структуру для более точного контроля
+                            AutoGrowingTextField(text: $messageText, maxHeight: 100, minHeight: 30)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(16)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(editingMessage != nil ? Color.blue : Color.clear, lineWidth: 1)
+                                )
+
+                            // Кнопка очистки при редактировании
+                            if editingMessage != nil {
+                                HStack {
+                                    Spacer()
+                                    Button(action: {
+                                        messageText = ""
+                                        editingMessage = nil
+                                    }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.gray)
+                                            .font(.system(size: 16))
+                                    }
+                                    .padding(.trailing, 12)
+                                }
+                            }
+                        }
+                        .frame(minHeight: 34) // Делаем минимальную высоту действительно небольшой
+
+                        // Кнопка отправки
                         Button(action: sendMessage) {
-                            Image(systemName: editingMessage != nil ? "pencil" : "paperplane.fill")
+                            Image(systemName: editingMessage != nil ? "checkmark.circle.fill" : "paperplane.fill")
+                                .font(.system(size: 20)) // Уменьшаем размер
                                 .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
-                                .padding(10)
+                                .padding(6) // Меньше отступы
+                                .background(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.clear : Color.blue.opacity(0.1))
+                                .clipShape(Circle())
                         }
                         .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10) // Уменьшаем боковые отступы
+                    .padding(.vertical, 6) // Уменьшаем вертикальные отступы
+                    .background(Color(.systemBackground))
 
                     // Панель эмодзи
                     if showEmojiPicker {
                         EmojiPickerView(onEmojiSelected: { emoji in
                             messageText += emoji
                         })
-                        .frame(height: 200)
+                        .frame(height: 220)
                         .transition(.move(edge: .bottom))
                     }
                 }
             } else {
-                Text("Вы не являетесь участником этого чата")
-                    .foregroundColor(.gray)
-                    .padding()
+                VStack(spacing: 16) {
+                    Image(systemName: "person.fill.xmark")
+                        .font(.system(size: 40))
+                        .foregroundColor(.gray)
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .clipShape(Circle())
+
+                    Text("Вы не являетесь участником этого чата")
+                        .foregroundColor(.gray)
+                        .fontWeight(.medium)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                }
+                .padding()
+                .background(Color(.systemBackground))
             }
         }
         .navigationTitle(chatRoom.name)
@@ -138,6 +203,7 @@ struct ChatView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingParticipants = true }) {
                         Image(systemName: "person.3")
+                            .font(.system(size: 16, weight: .medium))
                     }
                 }
             }
@@ -145,6 +211,7 @@ struct ChatView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Toggle(isOn: $scrollToBottom) {
                     Image(systemName: "arrow.down.to.line")
+                        .font(.system(size: 16, weight: .medium))
                 }
                 .toggleStyle(SwitchToggleStyle(tint: .blue))
             }
@@ -190,9 +257,19 @@ struct MessageBubble: View {
     let onDelete: (() -> Void)?
 
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 8) {
             if isFromCurrentUser {
                 Spacer()
+            } else {
+                // Аватар для сообщений других пользователей
+                Circle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Text(String(message.senderName.prefix(1)).uppercased())
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.gray)
+                    )
             }
 
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 2) {
@@ -203,22 +280,31 @@ struct MessageBubble: View {
                         .padding(.leading, 8)
                 }
 
-                HStack {
+                HStack(alignment: .bottom, spacing: 4) {
+                    if message.status == .failed {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                            .font(.system(size: 12))
+                    }
+
                     Text(message.text)
-                        .padding(10)
-                        .background(isFromCurrentUser ? Color.blue : Color(.systemGray5))
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .background(
+                            isFromCurrentUser ?
+                                Color.blue :
+                                Color(.systemGray5)
+                        )
                         .foregroundColor(isFromCurrentUser ? .white : .primary)
-                        .cornerRadius(16)
+                        .cornerRadius(18)
                         .contextMenu {
                             // Контекстное меню только для сообщений текущего пользователя
                             if isFromCurrentUser {
                                 Button(action: onEdit ?? {}) {
-                                    Text("Изменить")
-                                    Image(systemName: "pencil")
+                                    Label("Изменить", systemImage: "pencil")
                                 }
                                 Button(action: onDelete ?? {}) {
-                                    Text("Удалить")
-                                    Image(systemName: "trash")
+                                    Label("Удалить", systemImage: "trash")
                                 }
                             }
                         }
@@ -230,16 +316,26 @@ struct MessageBubble: View {
                     }
                 }
 
-                Text(formatTime(message.timestamp))
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-                    .padding(.horizontal, 8)
+                HStack(spacing: 4) {
+                    if message.status == .edited {
+                        Text("изменено")
+                            .font(.system(size: 10))
+                            .italic()
+                            .foregroundColor(.gray)
+                    }
+
+                    Text(formatTime(message.timestamp))
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 8)
+                }
             }
 
             if !isFromCurrentUser {
                 Spacer()
             }
         }
+        .padding(.vertical, 2)
     }
 
     private var statusIcon: some View {
@@ -274,62 +370,85 @@ struct MessageBubble: View {
     }
 }
 
-// Остальной код EmojiPickerView остается без изменений
+// Полностью переписанное автоувеличивающееся текстовое поле
+struct AutoGrowingTextField: UIViewRepresentable {
+    @Binding var text: String
+    var maxHeight: CGFloat
+    var minHeight: CGFloat
 
-// Создаем компонент для выбора эмодзи
-struct EmojiPickerView: View {
-    var onEmojiSelected: (String) -> Void
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.isScrollEnabled = false
+        textView.isEditable = true
+        textView.isUserInteractionEnabled = true
+        textView.font = UIFont.preferredFont(forTextStyle: .body)
+        textView.backgroundColor = .clear
+        textView.delegate = context.coordinator
 
-    // Наиболее используемые эмодзи для рабочего чата
-    private let frequentEmojis = ["👍", "👏", "🙌", "🤝", "👀", "👋", "🙂", "😊", "😁", "😄", "😎", "🤔", "🧐", "⏰", "📝", "✅", "❌", "‼️", "❓", "🔥"]
+        // Установка минимальной высоты
+        textView.frame = CGRect(x: 0, y: 0, width: 100, height: minHeight)
 
-    // Категории эмодзи
-    private let emojiCategories: [String: [String]] = [
-        "Частые": ["👍", "👏", "🙌", "🤝", "👀", "👋", "🙂", "😊", "😁", "😄", "😎", "🤔", "🧐", "⏰", "📝", "✅", "❌", "‼️", "❓", "🔥"],
-        "Смайлики": ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🙂", "😊", "😇", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳"],
-        "Жесты": ["👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "👇", "☝️", "👋", "🤚", "🖐️", "✋", "🖖", "👏", "🙌", "🤝", "💪", "✊", "🤛", "🤜"],
-        "Символы": ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "☮️", "✝️", "☪️", "🕉️", "☸️", "✡️", "🔯", "☯️", "☦️"],
-        "Объекты": ["⏰", "📱", "💻", "⌨️", "🖥️", "🖨️", "📷", "🔋", "🔌", "💡", "🔦", "📚", "📝", "✏️", "📊", "📈", "📉", "🔑", "🔒", "🔓"]
-    ]
+        // Минимизация отступов
+        textView.textContainerInset = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
+        textView.textContainer.lineFragmentPadding = 0
 
-    @State private var selectedCategory = "Частые"
+        return textView
+    }
 
-    var body: some View {
-        VStack(spacing: 8) {
-            // Линия-индикатор, что панель можно скрыть
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 40, height: 4)
-                .padding(.top, 4)
-
-            // Категории эмодзи
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(Array(emojiCategories.keys), id: \.self) { category in
-                        Text(category)
-                            .font(.subheadline)
-                            .foregroundColor(selectedCategory == category ? .blue : .gray)
-                            .onTapGesture {
-                                selectedCategory = category
-                            }
-                    }
-                }
-                .padding(.horizontal)
-            }
-
-            // Сетка эмодзи
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 10), spacing: 8) {
-                ForEach(emojiCategories[selectedCategory] ?? [], id: \.self) { emoji in
-                    Text(emoji)
-                        .font(.system(size: 24))
-                        .onTapGesture {
-                            onEmojiSelected(emoji)
-                        }
-                }
-            }
-            .padding(.horizontal)
-            .padding(.bottom)
+    func updateUIView(_ uiView: UITextView, context: Context) {
+        // Обновляем текст, если он изменился извне
+        if uiView.text != text {
+            uiView.text = text
         }
-        .background(Color(.systemBackground).edgesIgnoringSafeArea(.bottom))
+
+        // Измеряем и применяем высоту на основе содержимого
+        updateHeight(uiView)
+    }
+
+    private func updateHeight(_ textView: UITextView) {
+        // Фиксируем текущую ширину для точных расчетов
+        let width = textView.frame.width
+
+        // Рассчитываем необходимую высоту для текста
+        let newSize = textView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+
+        // Соблюдаем ограничения минимальной и максимальной высоты
+        let boundedHeight = min(max(newSize.height, minHeight), maxHeight)
+
+        // Применяем новую высоту, если она изменилась
+        if textView.frame.height != boundedHeight {
+            // Включаем скроллинг, если достигли максимальной высоты
+            textView.isScrollEnabled = boundedHeight >= maxHeight
+
+            // Обновляем высоту напрямую через frame
+            textView.frame.size.height = boundedHeight
+
+            // Обновляем любые существующие ограничения высоты
+            for constraint in textView.constraints where constraint.firstAttribute == .height {
+                constraint.constant = boundedHeight
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UITextViewDelegate {
+        var parent: AutoGrowingTextField
+
+        init(_ parent: AutoGrowingTextField) {
+            self.parent = parent
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            // Обновляем связанный текст
+            DispatchQueue.main.async {
+                self.parent.text = textView.text
+
+                // Обновляем высоту при изменении текста
+                self.parent.updateHeight(textView)
+            }
+        }
     }
 }

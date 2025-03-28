@@ -26,73 +26,170 @@ struct NewChatView: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("Chat Type")) {
-                    Toggle("Group chat", isOn: $isGroupChat)
-                }
+            ZStack {
+                Color(.systemGroupedBackground).edgesIgnoringSafeArea(.all)
 
-                if isGroupChat {
-                    Section(header: Text("Chat Name")) {
-                        TextField("Enter chat name", text: $chatName)
+                Form {
+                    Section(header: Text("Тип чата").font(.subheadline)) {
+                        Toggle(isOn: $isGroupChat) {
+                            HStack {
+                                Image(systemName: isGroupChat ? "person.3.fill" : "person.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.system(size: 18))
+                                    .frame(width: 30)
+
+                                Text(isGroupChat ? "Групповой чат" : "Личный чат")
+                                    .font(.system(size: 16, weight: .medium))
+                            }
+                        }
+                        .toggleStyle(SwitchToggleStyle(tint: .blue))
+                        .padding(.vertical, 4)
                     }
-                }
 
-                Section(header: Text("Participants")) {
+                    if isGroupChat {
+                        Section(header: Text("Название чата").font(.subheadline)) {
+                            HStack {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .foregroundColor(.blue)
+                                    .font(.system(size: 18))
+                                    .frame(width: 30)
+
+                                TextField("Введите название чата", text: $chatName)
+                                    .font(.system(size: 16))
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+
                     if !selectedUsers.isEmpty {
-                        List {
+                        Section(header: Text("Выбранные участники (\(selectedUsers.count))").font(.subheadline)) {
                             ForEach(selectedUsers) { user in
                                 HStack {
+                                    ZStack {
+                                        Circle()
+                                            .fill(LinearGradient(
+                                                gradient: Gradient(colors: [.blue.opacity(0.7), .blue]),
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing))
+                                            .frame(width: 36, height: 36)
+
+                                        Text(String(user.name.prefix(1)).uppercased())
+                                            .foregroundColor(.white)
+                                            .font(.system(size: 16, weight: .semibold))
+                                    }
+                                    .shadow(color: .blue.opacity(0.3), radius: 2, x: 0, y: 1)
+
                                     Text(user.name)
+                                        .font(.system(size: 16))
+
                                     Spacer()
+
                                     Button(action: {
                                         selectedUsers.removeAll { $0.id == user.id }
                                     }) {
                                         Image(systemName: "minus.circle.fill")
                                             .foregroundColor(.red)
+                                            .font(.system(size: 22))
                                     }
                                 }
+                                .padding(.vertical, 4)
                             }
                         }
                     }
-                }
 
-                Section(header: Text("Available Users")) {
-                    ForEach(filteredUsers) { user in
-                        if !selectedUsers.contains(where: { $0.id == user.id }) &&
-                           user.id != chatService.currentUserId {
-                            HStack {
-                                Text(user.name)
-                                Spacer()
-                                Button(action: {
-                                    selectedUsers.append(user)
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(.green)
+                    Section(header:
+                        HStack {
+                            Text("Доступные пользователи")
+                                .font(.subheadline)
+
+                            Spacer()
+
+                            Text("\(filteredUsers.count) из \(availableUsers.count)")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    ) {
+                        ForEach(filteredUsers) { user in
+                            if !selectedUsers.contains(where: { $0.id == user.id }) &&
+                               user.id != chatService.currentUserId {
+                                HStack {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 36, height: 36)
+
+                                        Text(String(user.name.prefix(1)).uppercased())
+                                            .foregroundColor(.gray)
+                                            .font(.system(size: 16, weight: .semibold))
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(user.name)
+                                            .font(.system(size: 16))
+
+                                        if !user.email.isEmpty {
+                                            Text(user.email)
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    Button(action: {
+                                        selectedUsers.append(user)
+                                        // Добавляем тактильный отклик
+                                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                                        generator.impactOccurred()
+                                    }) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundColor(.green)
+                                            .font(.system(size: 22))
+                                    }
                                 }
+                                .padding(.vertical, 4)
                             }
                         }
                     }
-                }
-                .searchable(text: $searchText, prompt: "Search users")
+                    .searchable(text: $searchText, prompt: "Поиск по имени или email")
 
-                Section {
-                    Button(action: createChat) {
-                        if isCreatingChat {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                        } else {
-                            Text("Create chat")
-                                .frame(maxWidth: .infinity)
-                                .bold()
+                    Section {
+                        Button(action: createChat) {
+                            HStack {
+                                Spacer()
+
+                                if isCreatingChat {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle())
+                                        .frame(height: 24)
+                                } else {
+                                    Text("Создать чат")
+                                        .font(.system(size: 16, weight: .semibold))
+                                }
+
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(isFormValid && !isCreatingChat ?
+                                        LinearGradient(gradient: Gradient(colors: [.blue, .blue.opacity(0.8)]), startPoint: .leading, endPoint: .trailing) :
+                                        LinearGradient(gradient: Gradient(colors: [.gray.opacity(0.3), .gray.opacity(0.3)]), startPoint: .leading, endPoint: .trailing))
+                            .foregroundColor(isFormValid && !isCreatingChat ? .white : .gray)
+                            .cornerRadius(12)
                         }
+                        .disabled(!isFormValid || isCreatingChat)
                     }
-                    .disabled(!isFormValid || isCreatingChat)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 0, bottom: 10, trailing: 0))
                 }
             }
-            .navigationTitle("New Chat")
-            .navigationBarItems(trailing: Button("Cancel") {
+            .navigationTitle("Новый чат")
+            .navigationBarItems(trailing: Button("Отмена") {
                 presentationMode.wrappedValue.dismiss()
-            })
+            }
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.blue)
+            )
             .onAppear {
                 fetchUsers()
             }
