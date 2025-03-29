@@ -1,51 +1,51 @@
 import Foundation
 
 class RecurrenceHelper {
-    
-    // Типы повторений
+
+    // Types of recurrence
     enum RecurrenceType: String, CaseIterable, Identifiable {
         case daily = "daily"
         case weekly = "weekly"
         case monthly = "monthly"
         case yearly = "yearly"
-        
+
         var id: String { self.rawValue }
-        
+
         var displayName: String {
             switch self {
-            case .daily: return "Ежедневно"
-            case .weekly: return "Еженедельно"
-            case .monthly: return "Ежемесячно"
-            case .yearly: return "Ежегодно"
+            case .daily: return "Daily"
+            case .weekly: return "Weekly"
+            case .monthly: return "Monthly"
+            case .yearly: return "Yearly"
             }
         }
     }
-    
-    // Генерирует даты для повторяющегося события
+
+    // Generate dates for recurring events
     static func generateRecurringDates(
         startDate: Date,
         endDate: Date?,
         type: RecurrenceType,
         interval: Int,
         daysOfWeek: [Int]? = nil,
-        limit: Int = 50 // Ограничение на количество создаваемых событий
+        limit: Int = 50 // Limit on the number of events created
     ) -> [Date] {
         var dates: [Date] = []
         let calendar = Calendar.current
-        
-        // Определяем крайнюю дату (или используем большой интервал, если дата не указана)
+
+        // Determine the final date (or use a large interval if date not specified)
         let finalEndDate = endDate ?? calendar.date(byAdding: .year, value: 2, to: startDate)!
-        
-        // Используем startDate как базовую дату
+
+        // Use startDate as the base date
         var currentDate = startDate
-        
-        // Добавляем начальную дату
+
+        // Add the start date
         dates.append(startDate)
-        
-        // Генерируем следующие даты в зависимости от типа повторения
+
+        // Generate the next dates depending on the type of recurrence
         while currentDate < finalEndDate && dates.count < limit {
             var dateComponent: DateComponents
-            
+
             switch type {
             case .daily:
                 dateComponent = DateComponents(day: interval)
@@ -55,24 +55,24 @@ class RecurrenceHelper {
                         dates.append(currentDate)
                     }
                 }
-                
+
             case .weekly:
-                // Если есть выбранные дни недели
+                // If there are selected days of the week
                 if let daysOfWeek = daysOfWeek, !daysOfWeek.isEmpty {
-                    // Переходим к следующей неделе
+                    // Move to the next week
                     dateComponent = DateComponents(day: 1)
-                    
+
                     while dates.count < limit {
                         currentDate = calendar.date(byAdding: dateComponent, to: currentDate)!
-                        
-                        // Если перешли на другую неделю с учетом интервала
+
+                        // If we moved to another week considering the interval
                         let weekOfYear = calendar.component(.weekOfYear, from: startDate)
                         let currentWeekOfYear = calendar.component(.weekOfYear, from: currentDate)
                         let weekDifference = currentWeekOfYear - weekOfYear
-                        
+
                         if weekDifference > 0 && weekDifference % interval == 0 {
                             let currentWeekday = calendar.component(.weekday, from: currentDate)
-                            
+
                             if daysOfWeek.contains(currentWeekday) {
                                 if currentDate <= finalEndDate {
                                     dates.append(currentDate)
@@ -81,14 +81,14 @@ class RecurrenceHelper {
                                 }
                             }
                         }
-                        
-                        // Если превысили конечную дату, выходим
+
+                        // If we exceeded the end date, exit
                         if currentDate > finalEndDate {
                             break
                         }
                     }
                 } else {
-                    // Простое еженедельное повторение
+                    // Simple weekly recurrence
                     dateComponent = DateComponents(day: 7 * interval)
                     while dates.count < limit {
                         if let nextDate = calendar.date(byAdding: dateComponent, to: currentDate) {
@@ -103,7 +103,7 @@ class RecurrenceHelper {
                         }
                     }
                 }
-                
+
             case .monthly:
                 dateComponent = DateComponents(month: interval)
                 while dates.count < limit {
@@ -118,7 +118,7 @@ class RecurrenceHelper {
                         break
                     }
                 }
-                
+
             case .yearly:
                 dateComponent = DateComponents(year: interval)
                 while dates.count < limit {
@@ -135,18 +135,18 @@ class RecurrenceHelper {
                 }
             }
         }
-        
+
         return dates
     }
-    
-    // Функция для получения всех дат повторяющихся событий на заданный период
+
+    // Function to get all dates of recurring events for a given period
     static func getRecurringEventDates(event: Event, startDate: Date, endDate: Date) -> [Date] {
         guard event.isRecurring,
               let recurrenceType = event.recurrenceType,
               let type = RecurrenceType(rawValue: recurrenceType) else {
-            return [event.date] // Если не повторяющееся, возвращаем только дату события
+            return [event.date] // If not recurring, return only the event date
         }
-        
+
         return generateRecurringDates(
             startDate: event.date,
             endDate: event.recurrenceEndDate,

@@ -7,12 +7,12 @@ struct RecurrenceView: View {
     @Binding var recurrenceInterval: Int
     @Binding var recurrenceEndDate: Date?
     @Binding var selectedDaysOfWeek: [Int]?
-    
+
     @State private var hasEndDate: Bool = false
     @State private var endDate: Date = Date().addingTimeInterval(60*60*24*30) // +30 days
-    
+
     let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
-    
+
     var body: some View {
         NavigationView {
             Form {
@@ -24,19 +24,19 @@ struct RecurrenceView: View {
                             }
                         }
                 }
-                
+
                 if isRecurring {
                     Section(header: Text("Frequency")) {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Repeat every")
                                 .font(.headline)
-                            
+
                             HStack {
                                 Stepper(value: $recurrenceInterval, in: 1...30) {
                                     Text("\(recurrenceInterval) \(intervalLabel)")
                                 }
                             }
-                            
+
                             Picker("Repeat Type", selection: $recurrenceType) {
                                 Text("Daily").tag(Optional(RecurrenceHelper.RecurrenceType.daily))
                                 Text("Weekly").tag(Optional(RecurrenceHelper.RecurrenceType.weekly))
@@ -45,26 +45,43 @@ struct RecurrenceView: View {
                             }
                             .pickerStyle(SegmentedPickerStyle())
                             .padding(.vertical, 8)
-                            
+
                             if recurrenceType == .weekly {
                                 Text("Repeat on days")
                                     .font(.headline)
                                     .padding(.top, 8)
-                                
-                                HStack(spacing: 8) {
-                                    ForEach(0..<7) { index in
-                                        Button(action: {
-                                            toggleDay(index + 1)
-                                        }) {
-                                            Text(weekdays[index])
-                                                .frame(width: 36, height: 36)
-                                                .background(isDaySelected(index + 1) ? Color.blue : Color.clear)
-                                                .foregroundColor(isDaySelected(index + 1) ? .white : .primary)
-                                                .cornerRadius(18)
-                                                .overlay(
-                                                    Circle()
-                                                        .stroke(Color.gray, lineWidth: isDaySelected(index + 1) ? 0 : 1)
-                                                )
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Days of week:")
+                                        .foregroundColor(.secondary)
+
+                                    // Container for days of the week WITHOUT a general tap handler
+                                    HStack(spacing: 8) {
+                                        ForEach(0..<7) { index in
+                                            let day = index + 1
+
+                                            // Each button as a separate component
+                                            Button(action: {
+                                                // Code to toggle only one day
+                                                if selectedDaysOfWeek == nil {
+                                                    selectedDaysOfWeek = [day]
+                                                } else {
+                                                    if selectedDaysOfWeek!.contains(day) {
+                                                        selectedDaysOfWeek!.removeAll { $0 == day }
+                                                    } else {
+                                                        selectedDaysOfWeek!.append(day)
+                                                    }
+                                                }
+                                            }) {
+                                                Text(weekdays[index])
+                                                    .frame(width: 36, height: 36)
+                                                    .background((selectedDaysOfWeek?.contains(day) ?? false) ? Color.blue : Color.clear)
+                                                    .foregroundColor((selectedDaysOfWeek?.contains(day) ?? false) ? .white : .primary)
+                                                    .cornerRadius(18)
+                                                    .overlay(Circle().stroke(Color.gray, lineWidth: (selectedDaysOfWeek?.contains(day) ?? false) ? 0 : 1))
+                                            }
+                                            // Important: make the button a real button, not allowing it to inherit styles
+                                            .buttonStyle(PlainButtonStyle())
                                         }
                                     }
                                 }
@@ -72,7 +89,7 @@ struct RecurrenceView: View {
                             }
                         }
                     }
-                    
+
                     Section(header: Text("End Repeat")) {
                         Toggle("Set End Date", isOn: $hasEndDate)
                             .onChange(of: hasEndDate) { newValue in
@@ -84,7 +101,7 @@ struct RecurrenceView: View {
                                     endDate = date
                                 }
                             }
-                        
+
                         if hasEndDate {
                             DatePicker("End Date", selection: $endDate, displayedComponents: [.date])
                                 .onChange(of: endDate) { newValue in
@@ -92,7 +109,7 @@ struct RecurrenceView: View {
                                 }
                         }
                     }
-                    
+
                     Section {
                         Text("This event will repeat \(recurrenceSummary)")
                             .font(.callout)
@@ -114,7 +131,7 @@ struct RecurrenceView: View {
                     } else if recurrenceType == .weekly && (selectedDaysOfWeek == nil || selectedDaysOfWeek!.isEmpty) {
                         selectedDaysOfWeek = [Calendar.current.component(.weekday, from: Date())]
                     }
-                    
+
                     presentationMode.wrappedValue.dismiss()
                 }
             )
@@ -123,18 +140,18 @@ struct RecurrenceView: View {
                 if let date = recurrenceEndDate {
                     endDate = date
                 }
-                
-                // Инициализация дней недели, если не выбраны
+
+                // Initialize days of the week, if not selected
                 if recurrenceType == .weekly && (selectedDaysOfWeek == nil || selectedDaysOfWeek!.isEmpty) {
                     selectedDaysOfWeek = [Calendar.current.component(.weekday, from: Date())]
                 }
             }
         }
     }
-    
+
     private var intervalLabel: String {
         guard let type = recurrenceType else { return "" }
-        
+
         switch type {
         case .daily:
             return recurrenceInterval == 1 ? "day" : "days"
@@ -146,21 +163,21 @@ struct RecurrenceView: View {
             return recurrenceInterval == 1 ? "year" : "years"
         }
     }
-    
+
     private var recurrenceSummary: String {
         guard let type = recurrenceType else { return "" }
-        
+
         var summary = "every "
         if recurrenceInterval > 1 {
             summary += "\(recurrenceInterval) "
         }
-        
+
         switch type {
         case .daily:
             summary += recurrenceInterval == 1 ? "day" : "days"
         case .weekly:
             summary += recurrenceInterval == 1 ? "week" : "weeks"
-            
+
             if let days = selectedDaysOfWeek, !days.isEmpty {
                 summary += " on " + days.sorted().map { weekdayName($0) }.joined(separator: ", ")
             }
@@ -169,7 +186,7 @@ struct RecurrenceView: View {
         case .yearly:
             summary += recurrenceInterval == 1 ? "year" : "years"
         }
-        
+
         if let endDate = recurrenceEndDate {
             let formatter = DateFormatter()
             formatter.dateStyle = .medium
@@ -178,28 +195,26 @@ struct RecurrenceView: View {
         } else {
             summary += " with no end date"
         }
-        
+
         return summary
     }
-    
-    private func isDaySelected(_ day: Int) -> Bool {
-        return selectedDaysOfWeek?.contains(day) ?? false
+
+    private func weekdayName(_ day: Int) -> String {
+        let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
+        // Day 1 corresponds to Sunday, but the array starts with 0
+        return weekdays[day - 1]
     }
-    
+
     private func toggleDay(_ day: Int) {
         if selectedDaysOfWeek == nil {
             selectedDaysOfWeek = []
         }
-        
+
         if let index = selectedDaysOfWeek?.firstIndex(of: day) {
             selectedDaysOfWeek?.remove(at: index)
         } else {
             selectedDaysOfWeek?.append(day)
         }
     }
-    
-    private func weekdayName(_ weekday: Int) -> String {
-        let calendar = Calendar.current
-        return weekdays[weekday - 1]
-    }
+
 }

@@ -1,11 +1,11 @@
 import SwiftUI
 import MapKit
 
-// Компонент для отображения места на карте с реальным геокодированием
+// Component for displaying a place on the map with real geocoding
 struct MapLocationView: View {
     var address: String
     @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 50.450001, longitude: 30.523333), // Киев по умолчанию
+        center: CLLocationCoordinate2D(latitude: 50.450001, longitude: 30.523333), // Kyiv by default
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
     @State private var locationAnnotations: [LocationAnnotation] = []
@@ -60,12 +60,12 @@ struct MapLocationView: View {
     }
 
     func geocodeAddress() {
-        // Создаем геокодер
+        // Create geocoder
         let geocoder = CLGeocoder()
         isLoading = true
         errorMessage = nil
 
-        // Геокодируем адрес
+        // Geocode the address
         geocoder.geocodeAddressString(address) { placemarks, error in
             DispatchQueue.main.async {
                 isLoading = false
@@ -81,13 +81,13 @@ struct MapLocationView: View {
                     return
                 }
 
-                // Настраиваем регион карты
+                // Configure map region
                 region = MKCoordinateRegion(
                     center: location.coordinate,
                     span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
                 )
 
-                // Создаем аннотацию
+                // Create annotation
                 let annotation = LocationAnnotation(
                     coordinate: location.coordinate,
                     title: placemark.name ?? "Location",
@@ -98,7 +98,7 @@ struct MapLocationView: View {
         }
     }
 
-    // Получение детального адреса из плейсмарка
+    // Get detailed address from placemark
     func getAddressDetails(from placemark: CLPlacemark) -> String {
         var addressComponents: [String] = []
 
@@ -130,7 +130,7 @@ struct MapLocationView: View {
     }
 }
 
-// Модель аннотации для карты
+// Annotation model for map
 struct LocationAnnotation: Identifiable {
     let id = UUID()
     var coordinate: CLLocationCoordinate2D

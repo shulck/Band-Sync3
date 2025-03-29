@@ -101,13 +101,13 @@ struct EventMapView: View {
 
                 self.placemark = placemark
 
-                // Обновляем регион карты
+                // Update map region
                 self.region = MKCoordinateRegion(
                     center: location.coordinate,
                     span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
                 )
 
-                // Создаем аннотацию
+                // Create annotation
                 let annotation = EventAnnotation(
                     coordinate: location.coordinate,
                     title: placemark.name ?? "Event",
